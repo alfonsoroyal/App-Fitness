@@ -24,4 +24,7 @@ builder.Services.AddHttpClient<INutritionSearchService, NutritionSearchService>(
     client.DefaultRequestHeaders.Add("User-Agent", "AppFitness/1.0");
 });
 
+// HttpClient for Clarifai food recognition
+builder.Services.AddHttpClient<IFoodRecognitionService, FoodRecognitionService>();
+
 await builder.Build().RunAsync();
