@@ -1,0 +1,80 @@
+﻿## .gitignore para proyecto .NET MAUI / Blazor
+
+# Build artifacts
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.DS_Store
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!**/packages/repositories.config
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# Rider / JetBrains
+.idea/
+*.DotSettings.user
+
+# Visual Studio
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.log
+*.cache
+
+# MAUI
+**/Platforms/Android/Resources/
+**/Platforms/iOS/
+**/Platforms/MacCatalyst/
+**/bin/Debug/
+**/bin/Release/
+**/obj/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Web
+wwwroot/dist/
+AppFitness.Web/AppData/
+
+# Secrets / Keys
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+*.key
+*.pem
+*.pfx
+
+# Logs
+*.log
+logs/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+

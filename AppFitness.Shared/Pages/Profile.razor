@@ -1,0 +1,194 @@
+﻿@page "/profile"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IUserProfileService ProfileService
+
+<PageTitle>Mi Perfil</PageTitle>
+
+<div class="page-profile">
+    <div class="page-header">
+        <h2>👤 Mi Perfil</h2>
+    </div>
+
+    @if (profile != null)
+    {
+        <div class="profile-avatar">
+            <span class="avatar-icon">@profile.Name.FirstOrDefault().ToString().ToUpper()</span>
+            <h3>@profile.Name</h3>
+            <span class="profile-meta">@profile.Age años · @profile.WeightKg kg · @profile.HeightCm cm</span>
+        </div>
+
+        <div class="card-fitness">
+            <div class="card-header-fitness">
+                <span class="card-icon">📝</span>
+                <span>Información personal</span>
+            </div>
+
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" class="form-input-fitness" @bind="profile.Name" />
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Peso (kg)</label>
+                    <input type="number" min="30" max="300" step="0.1" class="form-input-fitness"
+                           @bind="profile.WeightKg" />
+                </div>
+                <div class="form-group">
+                    <label>Altura (cm)</label>
+                    <input type="number" min="100" max="250" class="form-input-fitness"
+                           @bind="profile.HeightCm" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Fecha de nacimiento</label>
+                <input type="date" class="form-input-fitness" @bind="profile.BirthDate" />
+            </div>
+        </div>
+
+        <div class="card-fitness">
+            <div class="card-header-fitness">
+                <span class="card-icon">🎯</span>
+                <span>Objetivos</span>
+            </div>
+
+            <div class="form-group">
+                <label>Calorías diarias objetivo (kcal)</label>
+                <input type="number" min="800" max="6000" step="50" class="form-input-fitness"
+                       @bind="profile.DailyCalorieGoal" />
+                <p class="form-hint">@GetCalorieRecommendation()</p>
+            </div>
+
+            <div class="form-group">
+                <label>Objetivo fitness</label>
+                <select class="form-select-fitness" @bind="profile.Goal">
+                    <option>Perder peso</option>
+                    <option>Mantener peso</option>
+                    <option>Ganar masa muscular</option>
+                    <option>Mejorar resistencia</option>
+                    <option>Mejorar fuerza</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Nivel de actividad</label>
+                <select class="form-select-fitness" @bind="profile.ActivityLevel">
+                    @foreach (ActivityLevel level in Enum.GetValues(typeof(ActivityLevel)))
+                    {
+                        <option value="@level">@GetActivityDescription(level)</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <!-- Calculadora TDEE -->
+        <div class="card-fitness card-calculator">
+            <div class="card-header-fitness">
+                <span class="card-icon">🔢</span>
+                <span>Calculadora de calorías (TDEE)</span>
+            </div>
+            <p class="calc-info">Basado en tu perfil, tu TDEE estimado es:</p>
+            <div class="tdee-display">
+                <span class="tdee-value">@CalculateTDEE()</span>
+                <span class="tdee-unit">kcal/día</span>
+            </div>
+            <div class="tdee-breakdown">
+                <div class="tdee-row">
+                    <span>Perder peso (-500 kcal)</span>
+                    <span class="tdee-val-small">@(CalculateTDEE() - 500) kcal</span>
+                </div>
+                <div class="tdee-row">
+                    <span>Mantener peso</span>
+                    <span class="tdee-val-small">@CalculateTDEE() kcal</span>
+                </div>
+                <div class="tdee-row">
+                    <span>Ganar masa (+300 kcal)</span>
+                    <span class="tdee-val-small">@(CalculateTDEE() + 300) kcal</span>
+                </div>
+            </div>
+            <button class="btn-secondary-fitness" @onclick="ApplyTDEE">
+                Aplicar TDEE como objetivo
+            </button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-save" @onclick="SaveProfile">💾 Guardar perfil</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(saveMsg))
+        {
+            <p class="alert-success">@saveMsg</p>
+        }
+    }
+</div>
+
+@code {
+    private UserProfile? profile;
+    private string saveMsg = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        profile = await ProfileService.GetAsync();
+    }
+
+    private async Task SaveProfile()
+    {
+        if (profile != null)
+        {
+            await ProfileService.SaveAsync(profile);
+            saveMsg = "✅ Perfil guardado correctamente.";
+            await Task.Delay(3000);
+            saveMsg = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private int CalculateTDEE()
+    {
+        if (profile == null) return 2000;
+        // Fórmula Harris-Benedict revisada (Mifflin-St Jeor)
+        double bmr = 10 * profile.WeightKg + 6.25 * profile.HeightCm - 5 * profile.Age + 5;
+        double multiplier = profile.ActivityLevel switch
+        {
+            ActivityLevel.Sedentario => 1.2,
+            ActivityLevel.Ligero => 1.375,
+            ActivityLevel.Moderado => 1.55,
+            ActivityLevel.Activo => 1.725,
+            ActivityLevel.MuyActivo => 1.9,
+            _ => 1.55
+        };
+        return (int)(bmr * multiplier);
+    }
+
+    private void ApplyTDEE()
+    {
+        if (profile != null)
+            profile.DailyCalorieGoal = CalculateTDEE();
+    }
+
+    private string GetCalorieRecommendation()
+    {
+        if (profile == null) return string.Empty;
+        var tdee = CalculateTDEE();
+        if (profile.DailyCalorieGoal < tdee - 600)
+            return "⚠️ Muy por debajo del recomendado. Riesgo de déficit severo.";
+        if (profile.DailyCalorieGoal < tdee - 100)
+            return $"✅ Déficit calórico de {tdee - profile.DailyCalorieGoal} kcal. Bueno para perder peso.";
+        if (profile.DailyCalorieGoal > tdee + 100)
+            return $"💪 Superávit de {profile.DailyCalorieGoal - tdee} kcal. Bueno para ganar músculo.";
+        return "⚖️ Cerca de tu mantenimiento. Ideal para mantener el peso.";
+    }
+
+    private string GetActivityDescription(ActivityLevel level) => level switch
+    {
+        ActivityLevel.Sedentario => "Sedentario (poco o ningún ejercicio)",
+        ActivityLevel.Ligero => "Ligero (1-3 días/semana)",
+        ActivityLevel.Moderado => "Moderado (3-5 días/semana)",
+        ActivityLevel.Activo => "Activo (6-7 días/semana)",
+        ActivityLevel.MuyActivo => "Muy activo (2x día o trabajo físico)",
+        _ => level.ToString()
+    };
+}
+

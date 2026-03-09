@@ -1,0 +1,236 @@
+﻿@page "/workout/add"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IWorkoutLogService WorkoutLog
+@inject NavigationManager Nav
+
+<PageTitle>Nuevo Entrenamiento</PageTitle>
+
+<div class="page-add-workout">
+    <div class="page-header">
+        <a href="/workout" class="btn-back">← Volver</a>
+        <h2>🏋️ @(editMode ? "Editar Entrenamiento" : "Nuevo Entrenamiento")</h2>
+    </div>
+
+    <!-- Cabecera de sesión -->
+    <div class="card-fitness">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Fecha</label>
+                <input type="date" class="form-input-fitness" @bind="session.Date"
+                       max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="form-group">
+                <label>Duración (ej: 1h 15min)</label>
+                <input type="text" class="form-input-fitness" @bind="session.Duration"
+                       placeholder="Opcional" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Ejercicios añadidos -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">💪</span>
+            <span>Ejercicios</span>
+        </div>
+
+        @if (!session.Sets.Any())
+        {
+            <p class="empty-state">Añade ejercicios usando el catálogo o manualmente.</p>
+        }
+        else
+        {
+            @foreach (var (wset, idx) in session.Sets.Select((s, i) => (s, i)))
+            {
+                <div class="workout-set-card">
+                    <div class="set-card-header">
+                        <div class="set-exercise-name">
+                            <input class="exercise-name-input" @bind="wset.ExerciseName"
+                                   placeholder="Nombre del ejercicio" />
+                            <input class="muscle-input" @bind="wset.MuscleGroup"
+                                   placeholder="Músculo" />
+                        </div>
+                        <button class="btn-remove" @onclick="() => RemoveSet(idx)">✕</button>
+                    </div>
+                    <div class="set-inputs">
+                        <div class="set-field">
+                            <label>Series</label>
+                            <input type="number" min="1" max="20" @bind="wset.Sets" class="set-num-input" />
+                        </div>
+                        <div class="set-field">
+                            <label>Reps</label>
+                            <input type="number" min="1" max="200" @bind="wset.Reps" class="set-num-input" />
+                        </div>
+                        <div class="set-field">
+                            <label>Peso (kg)</label>
+                            <input type="number" min="0" step="0.5" @bind="wset.WeightKg" class="set-num-input" />
+                        </div>
+                        <div class="set-vol">
+                            <span class="vol-label">Volumen</span>
+                            <span class="vol-value">@wset.Volume.ToString("0") kg</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="session-total">
+                <span>Total: <strong>@session.TotalSets series</strong></span>
+                <span>Volumen total: <strong>@session.TotalVolume.ToString("0") kg</strong></span>
+            </div>
+        }
+    </div>
+
+    <!-- Catálogo de ejercicios -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">📚</span>
+            <span>Catálogo de ejercicios</span>
+        </div>
+
+        <div class="catalog-search">
+            <input type="text" class="form-input-fitness" placeholder="Filtrar ejercicios..."
+                   @oninput="FilterCatalog" />
+        </div>
+
+        <div class="catalog-filter-tabs">
+            @foreach (ExerciseCategory cat in Enum.GetValues(typeof(ExerciseCategory)))
+            {
+                <button class="cat-tab @(selectedCategory == cat ? "active" : "")"
+                        @onclick="() => SelectCategory(cat)">
+                    @cat
+                </button>
+            }
+            <button class="cat-tab @(selectedCategory == null ? "active" : "")"
+                    @onclick="() => SelectCategory(null)">
+                Todos
+            </button>
+        </div>
+
+        <div class="exercise-catalog">
+            @foreach (var ex in filteredExercises)
+            {
+                <div class="catalog-item" @onclick="() => AddExerciseFromCatalog(ex)">
+                    <div class="catalog-item-info">
+                        <span class="catalog-name">@ex.Name</span>
+                        <span class="catalog-muscle">@ex.MuscleGroup</span>
+                    </div>
+                    <span class="catalog-add">+</span>
+                </div>
+            }
+        </div>
+
+        <button class="btn-add-manual" @onclick="AddManualSet">+ Añadir ejercicio en blanco</button>
+    </div>
+
+    <!-- Notas de la sesión -->
+    <div class="card-fitness">
+        <label>Notas de la sesión (opcional)</label>
+        <textarea class="form-textarea-fitness" @bind="session.Notes"
+                  placeholder="Cómo fue el entreno, sensaciones..."></textarea>
+    </div>
+
+    <!-- Guardar -->
+    <div class="action-row">
+        <button class="btn-save" @onclick="SaveSession" disabled="@(!session.Sets.Any())">
+            💾 Guardar entrenamiento
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <p class="alert-error">@errorMsg</p>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? id { get; set; }
+
+    private WorkoutSession session = new();
+    private List<Exercise> catalog = new();
+    private List<Exercise> filteredExercises = new();
+    private ExerciseCategory? selectedCategory;
+    private string catalogFilter = string.Empty;
+    private string errorMsg = string.Empty;
+    private bool editMode = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        catalog = await WorkoutLog.GetExerciseCatalogAsync();
+        filteredExercises = catalog;
+
+        if (!string.IsNullOrEmpty(id) && Guid.TryParse(id, out var guid))
+        {
+            var all = await WorkoutLog.GetAllAsync();
+            var existing = all.FirstOrDefault(s => s.Id == guid);
+            if (existing != null)
+            {
+                session = existing;
+                editMode = true;
+            }
+        }
+    }
+
+    private void FilterCatalog(ChangeEventArgs e)
+    {
+        catalogFilter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+    }
+
+    private void SelectCategory(ExerciseCategory? cat)
+    {
+        selectedCategory = cat;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        filteredExercises = catalog
+            .Where(e => (selectedCategory == null || e.Category == selectedCategory))
+            .Where(e => string.IsNullOrEmpty(catalogFilter) ||
+                        e.Name.Contains(catalogFilter, StringComparison.OrdinalIgnoreCase) ||
+                        e.MuscleGroup.Contains(catalogFilter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private void AddExerciseFromCatalog(Exercise ex)
+    {
+        session.Sets.Add(new WorkoutSet
+        {
+            ExerciseId = ex.Id,
+            ExerciseName = ex.Name,
+            MuscleGroup = ex.MuscleGroup,
+            Sets = 3,
+            Reps = 10,
+            WeightKg = 0
+        });
+    }
+
+    private void AddManualSet()
+    {
+        session.Sets.Add(new WorkoutSet
+        {
+            ExerciseName = "Ejercicio",
+            Sets = 3,
+            Reps = 10
+        });
+    }
+
+    private void RemoveSet(int index)
+    {
+        if (index >= 0 && index < session.Sets.Count)
+            session.Sets.RemoveAt(index);
+    }
+
+    private async Task SaveSession()
+    {
+        if (!session.Sets.Any())
+        {
+            errorMsg = "Añade al menos un ejercicio.";
+            return;
+        }
+        await WorkoutLog.SaveAsync(session);
+        Nav.NavigateTo("/workout");
+    }
+}
+
