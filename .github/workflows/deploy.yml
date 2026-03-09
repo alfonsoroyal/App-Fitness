@@ -30,13 +30,23 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # ── Inyectar el secret de Gemini en appsettings.json ANTES del build ──
-      # El secret GEMINI_API_KEY se define en:
-      #   GitHub repo → Settings → Secrets and variables → Actions → New repository secret
-      - name: Inject Gemini API key into appsettings.json
+      # ── Inyectar las API keys de Gemini en appsettings.json ──────────────
+      # En GitHub: Settings → Secrets and variables → Actions → New repository secret
+      # Nombre del secret: GEMINI_API_KEYS
+      # Valor: varias keys separadas por coma, ej: AIzaSy...key1,AIzaSy...key2,AIzaSy...key3
+      - name: Inject Gemini API keys into appsettings.json
         run: |
-          echo '{"GeminiApiKey":"${{ secrets.GEMINI_API_KEY }}"}' \
-            > AppFitness.Wasm/wwwroot/appsettings.json
+          KEYS="${{ secrets.GEMINI_API_KEYS }}"
+          # Convierte "key1,key2,key3" → ["key1","key2","key3"]
+          JSON_ARRAY=$(echo "$KEYS" | python3 -c "
+          import sys, json
+          raw = sys.stdin.read().strip()
+          keys = [k.strip() for k in raw.split(',') if k.strip()]
+          print(json.dumps(keys))
+          ")
+          echo "{\"GeminiApiKeys\": $JSON_ARRAY}" > AppFitness.Wasm/wwwroot/appsettings.json
+          echo "appsettings.json generado:"
+          cat AppFitness.Wasm/wwwroot/appsettings.json
 
       - name: Restore dependencies
         run: dotnet restore AppFitness.Wasm/AppFitness.Wasm.csproj
@@ -47,13 +57,15 @@ jobs:
             -c Release \
             -o publish
 
-      # ── Ajustar base href para GitHub Pages (/App-Fitness/) ──
+      # ── Ajustar base href para GitHub Pages (/App-Fitness/) ──────────────
       - name: Fix base href for GitHub Pages
         run: |
           sed -i 's|<base href="/" />|<base href="/App-Fitness/" />|g' \
             publish/wwwroot/index.html
 
-      # ── El service worker y el 404 ya tienen la ruta correcta ──
+      - name: Add .nojekyll
+        run: touch publish/wwwroot/.nojekyll
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

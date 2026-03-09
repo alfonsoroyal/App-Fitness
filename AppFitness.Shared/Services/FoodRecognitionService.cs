@@ -7,33 +7,121 @@ using System.Text.Json.Serialization;
 namespace AppFitness.Shared.Services;
 
 /// <summary>
-/// Análisis nutricional de alimentos usando Google Gemini (texto).
-/// Free tier: 1500 solicitudes/día, sin tarjeta de crédito.
-/// La API key se carga desde localStorage (configurada por el usuario en Settings).
+/// Análisis nutricional usando Google Gemini (texto).
+/// Soporta múltiples API keys con fallback automático al recibir 429 (límite alcanzado).
+/// Las keys se inyectan desde el secret GEMINI_API_KEYS de GitHub (separadas por coma).
 /// </summary>
 public class FoodRecognitionService : IFoodRecognitionService
 {
     private readonly HttpClient _http;
-    private string _apiKey;
-
-    public bool HasApiKey => !string.IsNullOrWhiteSpace(_apiKey);
-
-    public void SetApiKey(string apiKey) => _apiKey = apiKey.Trim();
-
+    private readonly List<string> _apiKeys;   // keys inyectadas desde GitHub secrets
+    private string _manualApiKey = string.Empty; // key configurada manualmente por el usuario
     private string _selectedModel = "gemini-2.5-flash";
 
-    public void SetModel(string model) => _selectedModel = model;
+    // ─── Propiedades públicas ────────────────────────────────────────────────
+    public bool HasApiKey => ActiveKeys.Any();
 
-    public FoodRecognitionService(HttpClient http, string apiKey)
+    /// Todas las keys disponibles: primero la manual, luego las de secrets
+    private List<string> ActiveKeys
     {
-        _http   = http;
-        _apiKey = apiKey?.Trim() ?? string.Empty;
+        get
+        {
+            var all = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_manualApiKey)) all.Add(_manualApiKey);
+            all.AddRange(_apiKeys.Where(k => !string.IsNullOrWhiteSpace(k)));
+            return all.Distinct().ToList();
+        }
     }
 
+    public void SetApiKey(string apiKey) => _manualApiKey = apiKey.Trim();
+    public void SetModel(string model)   => _selectedModel = model;
+
+    // Constructor con array de keys (desde appsettings.json inyectado por GitHub Actions)
+    public FoodRecognitionService(HttpClient http, string[] apiKeys)
+    {
+        _http    = http;
+        _apiKeys = apiKeys?.Select(k => k.Trim()).Where(k => !string.IsNullOrWhiteSpace(k)).ToList()
+                   ?? new List<string>();
+    }
+
+    // Constructor legacy con key única
+    public FoodRecognitionService(HttpClient http, string apiKey)
+        : this(http, string.IsNullOrWhiteSpace(apiKey) ? Array.Empty<string>() : new[] { apiKey }) { }
+
+    // ─── Llamada a Gemini con fallback entre keys ────────────────────────────
+    /// <summary>
+    /// Intenta la llamada con cada key disponible en orden.
+    /// Si una key devuelve 429 o 401/403, pasa automáticamente a la siguiente.
+    /// </summary>
+    private async Task<(bool ok, string? rawText, string? errorMsg)> CallGeminiAsync(
+        object requestBody, CancellationToken ct = default)
+    {
+        var keys = ActiveKeys;
+        if (keys.Count == 0)
+            return (false, null, "No hay API keys configuradas. Añade el secret GEMINI_API_KEYS en GitHub → Settings → Secrets and variables → Actions, o configúrala manualmente en Ajustes IA.");
+
+        var json    = JsonSerializer.Serialize(requestBody);
+        var baseUrl = $"https://generativelanguage.googleapis.com/v1/models/{_selectedModel}:generateContent";
+
+        string? lastError = null;
+        for (int i = 0; i < keys.Count; i++)
+        {
+            var key = keys[i];
+            var url = $"{baseUrl}?key={key}";
+            try
+            {
+                using var cts      = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
+                var content  = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await _http.PostAsync(url, content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var resp    = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken: cts.Token);
+                    var rawText = resp?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
+                    return string.IsNullOrEmpty(rawText)
+                        ? (false, null, "La IA no devolvió resultado.")
+                        : (true, rawText, null);
+                }
+
+                var errBody = await response.Content.ReadAsStringAsync();
+                var isRateLimit = response.StatusCode == HttpStatusCode.TooManyRequests;
+                var isAuthError = response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized;
+
+                if (isRateLimit)
+                {
+                    lastError = $"Key {i + 1}/{keys.Count} alcanzó el límite de peticiones (429).";
+                    continue; // prueba con la siguiente key
+                }
+                if (isAuthError)
+                {
+                    lastError = $"Key {i + 1}/{keys.Count} inválida o sin permisos (401/403).";
+                    continue; // prueba con la siguiente key
+                }
+
+                // Error no recuperable → no seguir probando
+                return (false, null, $"Error del servidor IA ({(int)response.StatusCode}). {TryExtractGeminiError(errBody)}");
+            }
+            catch (TaskCanceledException)
+            {
+                lastError = $"Key {i + 1}/{keys.Count}: tiempo de espera agotado.";
+                // No hacer fallback en timeout — puede ser problema de red
+                return (false, null, "Tiempo de espera agotado. Comprueba tu conexión.");
+            }
+        }
+
+        // Todas las keys fallaron por límite/auth
+        return (false, null,
+            $"Todas las API keys han alcanzado el límite o son inválidas. " +
+            $"({keys.Count} key{(keys.Count > 1 ? "s" : "")} probada{(keys.Count > 1 ? "s" : "")}). " +
+            $"Último error: {lastError}");
+    }
+
+    // ─── AnalyzeTextAsync ────────────────────────────────────────────────────
     public async Task<FoodAnalysisResult> AnalyzeTextAsync(string description)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
-            return Error("API key de Gemini no configurada. Añade el secret GEMINI_API_KEY en GitHub → Settings → Secrets and variables → Actions.");
+        if (!HasApiKey)
+            return Error("No hay API keys configuradas. Añade el secret GEMINI_API_KEYS en GitHub → Settings → Secrets and variables → Actions, o configúrala manualmente en Ajustes IA.");
         if (string.IsNullOrWhiteSpace(description))
             return Error("Introduce una descripción del plato o alimento.");
         try
@@ -41,54 +129,23 @@ public class FoodRecognitionService : IFoodRecognitionService
             var prompt =
                 "Eres un nutricionista experto. Dado el siguiente plato o alimento, responde ÚNICAMENTE con un objeto JSON compacto en UNA SOLA LÍNEA, sin saltos de línea, sin espacios extra, sin explicaciones, sin markdown.\n" +
                 "Usa EXACTAMENTE este formato (valores numéricos reales, nunca texto):\n" +
-                "{\"dish\":\"Nombre del plato\",\"ingredients\":[{\"name\":\"Ingrediente\",\"grams\":100,\"kcal_per_100g\":150,\"protein_per_100g\":10,\"carbs_per_100g\":20,\"fat_per_100g\":5},{\"name\":\"Ingrediente2\",\"grams\":50,\"kcal_per_100g\":200,\"protein_per_100g\":5,\"carbs_per_100g\":30,\"fat_per_100g\":8}]}\n" +
+                "{\"dish\":\"Nombre del plato\",\"ingredients\":[{\"name\":\"Ingrediente\",\"grams\":100,\"kcal_per_100g\":150,\"protein_per_100g\":10,\"carbs_per_100g\":20,\"fat_per_100g\":5}]}\n" +
                 "IMPORTANTE: grams, kcal_per_100g, protein_per_100g, carbs_per_100g y fat_per_100g son siempre números decimales.\n" +
                 "Plato a analizar: " + description;
+
             var body = new
             {
-                contents = new[]
-                {
-                    new
-                    {
-                        parts = new object[]
-                        {
-                            new { text = prompt }
-                        }
-                    }
-                },
-                generationConfig = new
-                {
-                    temperature     = 0.1,
-                    maxOutputTokens = 2048
-                }
+                contents = new[] { new { parts = new object[] { new { text = prompt } } } },
+                generationConfig = new { temperature = 0.1, maxOutputTokens = 2048 }
             };
-            var json    = JsonSerializer.Serialize(body);
-            var endpoint = $"https://generativelanguage.googleapis.com/v1/models/{_selectedModel}:generateContent";
-            var url     = endpoint + $"?key={_apiKey}";
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var response = await _http.PostAsync(url, content, cts.Token);
-            if (!response.IsSuccessStatusCode)
-            {
-                var errBody = await response.Content.ReadAsStringAsync();
-                return response.StatusCode switch
-                {
-                    HttpStatusCode.TooManyRequests =>
-                        Error($"429 — Límite de peticiones de Gemini alcanzado. Espera un minuto e inténtalo de nuevo."),
-                    HttpStatusCode.ServiceUnavailable or HttpStatusCode.BadGateway =>
-                        Error($"El modelo {_selectedModel} no está disponible ahora mismo."),
-                    HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
-                        Error("API key de Gemini inválida o sin permisos. Comprueba el secret GEMINI_API_KEY en GitHub → Settings → Secrets."),
-                    _ => Error($"Error del servidor IA ({(int)response.StatusCode}). {TryExtractGeminiError(errBody)}")
-                };
-            }
-            var geminiResp = await response.Content.ReadFromJsonAsync<GeminiResponse>();
-            var rawText    = geminiResp?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
-            if (string.IsNullOrEmpty(rawText))
-                return Error("La IA no devolvió resultado.");
-            rawText = StripMarkdownFences(rawText);
+
+            var (ok, rawText, errorMsg) = await CallGeminiAsync(body);
+            if (!ok) return Error(errorMsg!);
+
+            rawText = StripMarkdownFences(rawText!);
             rawText = CleanGeminiJson(rawText);
-            GeminiDishResult? parsed = null;
+
+            GeminiDishResult? parsed;
             try
             {
                 parsed = JsonSerializer.Deserialize<GeminiDishResult>(rawText,
@@ -96,10 +153,10 @@ public class FoodRecognitionService : IFoodRecognitionService
             }
             catch (Exception ex)
             {
-                return Error($"Error al interpretar la respuesta de la IA.\nJSON recibido:\n{rawText}\n\n{ex.Message}");
+                return Error($"Error al interpretar la respuesta IA.\nJSON:\n{rawText}\n\n{ex.Message}");
             }
-            if (parsed == null)
-                return Error("No se pudo interpretar la respuesta de la IA.");
+            if (parsed == null) return Error("No se pudo interpretar la respuesta de la IA.");
+
             return new FoodAnalysisResult
             {
                 DishName    = parsed.Dish ?? description,
@@ -112,175 +169,46 @@ public class FoodRecognitionService : IFoodRecognitionService
                         ProteinPer100g = Math.Max(0, i.ProteinPer100g),
                         CarbsPer100g   = Math.Max(0, i.CarbsPer100g),
                         FatPer100g     = Math.Max(0, i.FatPer100g)
-                    })
-                    .ToList()
+                    }).ToList()
             };
         }
-        catch (TaskCanceledException)
-        {
-            return Error("Tiempo de espera agotado. Comprueba tu conexión e inténtalo de nuevo.");
-        }
-        catch (Exception ex)
-        {
-            return Error($"Error inesperado: {ex.Message}");
-        }
-    }
-    // ─── Extraer mensaje legible del error JSON de Gemini ────────────────────
-    private static string TryExtractGeminiError(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var msg = doc.RootElement
-                .GetProperty("error")
-                .GetProperty("message")
-                .GetString();
-            return msg ?? string.Empty;
-        }
-        catch { return string.Empty; }
+        catch (Exception ex) { return Error($"Error inesperado: {ex.Message}"); }
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
-    private static FoodAnalysisResult Error(string msg) => new() { Error = msg };
-
-    private static string Capitalize(string s) =>
-        string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
-
-    private static string StripMarkdownFences(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return text;
-        text = text.Trim();
-
-        // Elimina bloque ```json ... ``` o ``` ... ```
-        if (text.StartsWith("```"))
-        {
-            var firstNewline = text.IndexOf('\n');
-            var lastFence    = text.LastIndexOf("```", StringComparison.Ordinal);
-            if (firstNewline > 0 && lastFence > firstNewline)
-                text = text[(firstNewline + 1)..lastFence].Trim();
-            else if (firstNewline > 0)
-                text = text[(firstNewline + 1)..].Trim();
-        }
-
-        // Elimina línea inicial "json" o "JSON"
-        if (text.StartsWith("json", StringComparison.OrdinalIgnoreCase))
-        {
-            var idx = text.IndexOf('\n');
-            if (idx > 0) text = text[(idx + 1)..].Trim();
-        }
-
-        // Extrae desde el primer '{' hasta el último '}'
-        var firstBrace = text.IndexOf('{');
-        if (firstBrace > 0) text = text[firstBrace..];
-        var lastBrace = text.LastIndexOf('}');
-        if (lastBrace >= 0 && lastBrace < text.Length - 1)
-            text = text[..(lastBrace + 1)];
-
-        return text.Trim();
-    }
-
-    // Repara JSON incompleto: cierra cadenas, objetos y arrays abiertos
-    private static string CleanGeminiJson(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return json;
-
-        // Elimina comas finales antes de ] o }
-        json = System.Text.RegularExpressions.Regex.Replace(json, @",\s*([\]}])", "$1");
-
-        // Cierra cadenas sin cerrar (número impar de comillas dobles no escapadas)
-        int quotes = 0;
-        bool escaped = false;
-        foreach (char c in json)
-        {
-            if (c == '\\') { escaped = !escaped; continue; }
-            if (c == '"' && !escaped) quotes++;
-            escaped = false;
-        }
-        if (quotes % 2 != 0) json += "\"";
-
-        // Cierra objetos y arrays abiertos desde el final
-        var stack = new System.Collections.Generic.Stack<char>();
-        bool inStr = false;
-        escaped = false;
-        foreach (char c in json)
-        {
-            if (escaped) { escaped = false; continue; }
-            if (c == '\\') { escaped = true; continue; }
-            if (c == '"') { inStr = !inStr; continue; }
-            if (inStr) continue;
-            if (c == '{') stack.Push('}');
-            else if (c == '[') stack.Push(']');
-            else if (c == '}' || c == ']')
-            {
-                if (stack.Count > 0 && stack.Peek() == c) stack.Pop();
-            }
-        }
-        // Añade los cierres que faltan en orden inverso
-        while (stack.Count > 0)
-            json += stack.Pop();
-
-        return json.Trim();
-    }
-
-    // ─── Análisis de calorías quemadas en entrenamiento ─────────────────────
+    // ─── AnalyzeWorkoutAsync ─────────────────────────────────────────────────
     public async Task<WorkoutAnalysisResult> AnalyzeWorkoutAsync(
         List<WorkoutSetInput> sets, int durationMinutes, double userWeightKg)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
-            return WorkoutError("API key de Gemini no configurada.");
+        if (!HasApiKey)
+            return WorkoutError("No hay API keys configuradas. Configura GEMINI_API_KEYS en GitHub Secrets o manualmente en Ajustes IA.");
         if (sets == null || sets.Count == 0)
             return WorkoutError("No hay ejercicios para analizar.");
         try
         {
-            // Construir descripción de la sesión
-            var setLines = sets.Select(s =>
-                $"{s.ExerciseName} ({s.MuscleGroup}): {s.Sets} series x {s.Reps} reps x {s.WeightKg} kg");
-            var sessionDesc = string.Join(", ", setLines);
+            var sessionDesc = string.Join(", ", sets.Select(s =>
+                $"{s.ExerciseName} ({s.MuscleGroup}): {s.Sets} series x {s.Reps} reps x {s.WeightKg} kg"));
 
             var prompt =
                 "Eres un experto en fisiología del ejercicio. Dado el siguiente entrenamiento, estima las calorías quemadas.\n" +
                 $"Peso del usuario: {userWeightKg} kg. Duración total: {durationMinutes} minutos.\n" +
-                "Ejercicios realizados: " + sessionDesc + "\n" +
-                "Responde ÚNICAMENTE con un objeto JSON compacto en UNA SOLA LÍNEA, sin saltos de línea, sin markdown.\n" +
-                "Usa EXACTAMENTE este formato (valores numéricos reales):\n" +
-                "{\"total_kcal\":350,\"details\":[{\"exercise\":\"Press banca\",\"kcal\":120,\"notes\":\"Ejercicio compuesto alta intensidad\"},{\"exercise\":\"Sentadilla\",\"kcal\":230,\"notes\":\"Tren inferior, alta demanda energética\"}]}\n" +
-                "IMPORTANTE: total_kcal y kcal son siempre números, nunca texto.";
+                "Ejercicios: " + sessionDesc + "\n" +
+                "Responde ÚNICAMENTE con un JSON compacto en UNA SOLA LÍNEA, sin markdown.\n" +
+                "Formato exacto: {\"total_kcal\":350,\"details\":[{\"exercise\":\"Press banca\",\"kcal\":120,\"notes\":\"Compuesto alta intensidad\"}]}\n" +
+                "IMPORTANTE: total_kcal y kcal son siempre números.";
 
             var body = new
             {
-                contents = new[]
-                {
-                    new { parts = new object[] { new { text = prompt } } }
-                },
+                contents = new[] { new { parts = new object[] { new { text = prompt } } } },
                 generationConfig = new { temperature = 0.1, maxOutputTokens = 1024 }
             };
 
-            var json     = JsonSerializer.Serialize(body);
-            var url      = $"https://generativelanguage.googleapis.com/v1/models/{_selectedModel}:generateContent?key={_apiKey}";
-            var content  = new StringContent(json, Encoding.UTF8, "application/json");
-            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var response = await _http.PostAsync(url, content, cts.Token);
+            var (ok, rawText, errorMsg) = await CallGeminiAsync(body);
+            if (!ok) return WorkoutError(errorMsg!);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var errBody = await response.Content.ReadAsStringAsync();
-                return response.StatusCode switch
-                {
-                    HttpStatusCode.TooManyRequests  => WorkoutError("429 — Límite de peticiones alcanzado. Espera un minuto."),
-                    HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized => WorkoutError("API key inválida o sin permisos."),
-                    _ => WorkoutError($"Error del servidor IA ({(int)response.StatusCode}). {TryExtractGeminiError(errBody)}")
-                };
-            }
-
-            var geminiResp = await response.Content.ReadFromJsonAsync<GeminiResponse>();
-            var rawText    = geminiResp?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
-            if (string.IsNullOrEmpty(rawText))
-                return WorkoutError("La IA no devolvió resultado.");
-
-            rawText = StripMarkdownFences(rawText);
+            rawText = StripMarkdownFences(rawText!);
             rawText = CleanGeminiJson(rawText);
 
-            GeminiWorkoutResult? parsed = null;
+            GeminiWorkoutResult? parsed;
             try
             {
                 parsed = JsonSerializer.Deserialize<GeminiWorkoutResult>(rawText,
@@ -290,9 +218,7 @@ public class FoodRecognitionService : IFoodRecognitionService
             {
                 return WorkoutError($"Error al interpretar respuesta IA.\nJSON:\n{rawText}\n{ex.Message}");
             }
-
-            if (parsed == null)
-                return WorkoutError("No se pudo interpretar la respuesta de la IA.");
+            if (parsed == null) return WorkoutError("No se pudo interpretar la respuesta de la IA.");
 
             return new WorkoutAnalysisResult
             {
@@ -303,23 +229,132 @@ public class FoodRecognitionService : IFoodRecognitionService
                         ExerciseName = Capitalize(d.Exercise ?? "Ejercicio"),
                         KcalBurned   = Math.Max(0, d.Kcal),
                         Notes        = d.Notes ?? string.Empty
-                    })
-                    .ToList()
+                    }).ToList()
             };
         }
-        catch (TaskCanceledException)
-        {
-            return WorkoutError("Tiempo de espera agotado.");
-        }
-        catch (Exception ex)
-        {
-            return WorkoutError($"Error inesperado: {ex.Message}");
-        }
+        catch (Exception ex) { return WorkoutError($"Error inesperado: {ex.Message}"); }
     }
 
+    // ─── ListAvailableModelsAsync ─────────────────────────────────────────────
+    public async Task<List<string>> ListAvailableModelsAsync()
+    {
+        var key = ActiveKeys.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(key))
+            return new List<string> { "Error: no hay API keys configuradas." };
+
+        var url = $"https://generativelanguage.googleapis.com/v1/models?key={key}";
+        try
+        {
+            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var response = await _http.GetAsync(url, cts.Token);
+            if (!response.IsSuccessStatusCode)
+                return new List<string> { $"Error: {response.StatusCode}" };
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var models = new List<string>();
+            foreach (var model in doc.RootElement.GetProperty("models").EnumerateArray())
+                if (model.TryGetProperty("name", out var name))
+                    models.Add(name.GetString() ?? "");
+            return models;
+        }
+        catch (Exception ex) { return new List<string> { $"Exception: {ex.Message}" }; }
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+    private static FoodAnalysisResult   Error(string msg)        => new() { Error = msg };
     private static WorkoutAnalysisResult WorkoutError(string msg) => new() { Error = msg };
 
-    // ─── DTO workout Gemini ───────────────────────────────────────────────────
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    private static string TryExtractGeminiError(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("error").GetProperty("message").GetString() ?? string.Empty;
+        }
+        catch { return string.Empty; }
+    }
+
+    private static string StripMarkdownFences(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text;
+        text = text.Trim();
+        if (text.StartsWith("```"))
+        {
+            var first = text.IndexOf('\n');
+            var last  = text.LastIndexOf("```", StringComparison.Ordinal);
+            text = first > 0 && last > first
+                ? text[(first + 1)..last].Trim()
+                : first > 0 ? text[(first + 1)..].Trim() : text;
+        }
+        if (text.StartsWith("json", StringComparison.OrdinalIgnoreCase))
+        {
+            var idx = text.IndexOf('\n');
+            if (idx > 0) text = text[(idx + 1)..].Trim();
+        }
+        var fb = text.IndexOf('{');
+        if (fb > 0) text = text[fb..];
+        var lb = text.LastIndexOf('}');
+        if (lb >= 0 && lb < text.Length - 1) text = text[..(lb + 1)];
+        return text.Trim();
+    }
+
+    private static string CleanGeminiJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        json = System.Text.RegularExpressions.Regex.Replace(json, @",\s*([\]}])", "$1");
+
+        // Cuenta comillas no escapadas para detectar cadena sin cerrar
+        int quotes = 0; bool esc = false;
+        foreach (var c in json)
+        {
+            if (c == '\\') { esc = !esc; continue; }
+            if (c == '"' && !esc) quotes++;
+            esc = false;
+        }
+        if (quotes % 2 != 0) json += "\"";
+
+        // Cierra objetos/arrays abiertos
+        var stack = new Stack<char>();
+        bool inStr = false; esc = false;
+        foreach (var c in json)
+        {
+            if (esc) { esc = false; continue; }
+            if (c == '\\') { esc = true; continue; }
+            if (c == '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (c == '{') stack.Push('}');
+            else if (c == '[') stack.Push(']');
+            else if ((c == '}' || c == ']') && stack.Count > 0 && stack.Peek() == c) stack.Pop();
+        }
+        while (stack.Count > 0) json += stack.Pop();
+        return json.Trim();
+    }
+
+    // ─── DTOs Gemini ──────────────────────────────────────────────────────────
+    public class GeminiResponse  { [JsonPropertyName("candidates")] public List<GeminiCandidate>? Candidates { get; set; } }
+    public class GeminiCandidate { [JsonPropertyName("content")]    public GeminiContent? Content { get; set; } }
+    public class GeminiContent   { [JsonPropertyName("parts")]      public List<GeminiPart>? Parts { get; set; } }
+    public class GeminiPart      { [JsonPropertyName("text")]       public string? Text { get; set; } }
+
+    public class GeminiDishResult
+    {
+        [JsonPropertyName("dish")]        public string? Dish { get; set; }
+        [JsonPropertyName("ingredients")] public List<GeminiIngredient>? Ingredients { get; set; }
+    }
+    public class GeminiIngredient
+    {
+        [JsonPropertyName("name")]             public string? Name { get; set; }
+        [JsonPropertyName("grams")]            public double Grams { get; set; }
+        [JsonPropertyName("kcal_per_100g")]    public double KcalPer100g { get; set; }
+        [JsonPropertyName("protein_per_100g")] public double ProteinPer100g { get; set; }
+        [JsonPropertyName("carbs_per_100g")]   public double CarbsPer100g { get; set; }
+        [JsonPropertyName("fat_per_100g")]     public double FatPer100g { get; set; }
+    }
+
     private class GeminiWorkoutResult
     {
         [JsonPropertyName("total_kcal")] public double TotalKcal { get; set; }
@@ -330,71 +365,5 @@ public class FoodRecognitionService : IFoodRecognitionService
         [JsonPropertyName("exercise")] public string? Exercise { get; set; }
         [JsonPropertyName("kcal")]     public double  Kcal     { get; set; }
         [JsonPropertyName("notes")]    public string? Notes    { get; set; }
-    }
-    public async Task<List<string>> ListAvailableModelsAsync()
-    {
-        var url = $"https://generativelanguage.googleapis.com/v1/models?key={_apiKey}";
-        try
-        {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            var response = await _http.GetAsync(url, cts.Token);
-            if (!response.IsSuccessStatusCode)
-                return new List<string> { $"Error: {response.StatusCode} {await response.Content.ReadAsStringAsync()}" };
-
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            var models = new List<string>();
-            foreach (var model in doc.RootElement.GetProperty("models").EnumerateArray())
-            {
-                if (model.TryGetProperty("name", out var name))
-                    models.Add(name.GetString() ?? "");
-            }
-            return models;
-        }
-        catch (Exception ex)
-        {
-            return new List<string> { $"Exception: {ex.Message}" };
-        }
-    }
-
-    // ─── DTOs Gemini ─────────────────────────────────────────────────────────
-    public class GeminiResponse
-    {
-        [JsonPropertyName("candidates")]
-        public List<GeminiCandidate>? Candidates { get; set; }
-    }
-    public class GeminiCandidate
-    {
-        [JsonPropertyName("content")]
-        public GeminiContent? Content { get; set; }
-    }
-    public class GeminiContent
-    {
-        [JsonPropertyName("parts")]
-        public List<GeminiPart>? Parts { get; set; }
-    }
-    public class GeminiPart
-    {
-        [JsonPropertyName("text")]
-        public string? Text { get; set; }
-    }
-
-    // ─── DTOs del JSON que devuelve Gemini ───────────────────────────────────
-    public class GeminiDishResult
-    {
-        [JsonPropertyName("dish")]
-        public string? Dish { get; set; }
-
-        [JsonPropertyName("ingredients")]
-        public List<GeminiIngredient>? Ingredients { get; set; }
-    }
-    public class GeminiIngredient
-    {
-        [JsonPropertyName("name")]        public string? Name { get; set; }
-        [JsonPropertyName("grams")]       public double Grams { get; set; }
-        [JsonPropertyName("kcal_per_100g")]    public double KcalPer100g { get; set; }
-        [JsonPropertyName("protein_per_100g")] public double ProteinPer100g { get; set; }
-        [JsonPropertyName("carbs_per_100g")]   public double CarbsPer100g { get; set; }
-        [JsonPropertyName("fat_per_100g")]     public double FatPer100g { get; set; }
     }
 }
