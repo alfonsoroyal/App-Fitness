@@ -2,6 +2,7 @@
 @using AppFitness.Shared.Services
 @using AppFitness.Shared.Models
 @inject IWorkoutLogService WorkoutLog
+@inject IFoodRecognitionService FoodRecognition
 @inject NavigationManager Nav
 
 <PageTitle>Nuevo Entrenamiento</PageTitle>
@@ -130,6 +131,65 @@
                   placeholder="Cómo fue el entreno, sensaciones..."></textarea>
     </div>
 
+    <!-- Estimación de calorías quemadas (IA) -->
+    @if (session.Sets.Any())
+    {
+        <div class="card-fitness">
+            <div class="card-header-fitness">
+                <span class="card-icon">🔥</span>
+                <span>Estimación de calorías quemadas</span>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tu peso (kg)</label>
+                    <input type="number" min="30" max="300" step="0.5" class="form-input-fitness"
+                           @bind="userWeightKg" placeholder="70" />
+                </div>
+                <div class="form-group">
+                    <label>Duración total (minutos)</label>
+                    <input type="number" min="1" max="300" class="form-input-fitness"
+                           @bind="durationMinutes" placeholder="60" />
+                </div>
+            </div>
+            <button class="btn-search" @onclick="EstimateKcal"
+                    disabled="@(isEstimating || !FoodRecognition.HasApiKey)">
+                @if (isEstimating)
+                { <span>⏳ Calculando...</span> }
+                else
+                { <span>🤖 Estimar kcal quemadas con IA</span> }
+            </button>
+            @if (!FoodRecognition.HasApiKey)
+            {
+                <p class="info-banner warn" style="margin-top:0.5rem;">
+                    ⚠️ Necesitas configurar la API key de Gemini en <a href="configuracion-ia">Configuración IA</a>.
+                </p>
+            }
+            @if (!string.IsNullOrEmpty(kcalError))
+            {
+                <div class="info-banner warn">⚠️ @kcalError</div>
+            }
+            @if (workoutResult != null && workoutResult.Success)
+            {
+                <div class="kcal-result">
+                    <div class="kcal-total-badge">
+                        🔥 <strong>@workoutResult.TotalKcalBurned.ToString("0") kcal</strong> quemadas (estimación)
+                    </div>
+                    @foreach (var d in workoutResult.Details)
+                    {
+                        <div class="kcal-detail-row">
+                            <span class="kcal-exercise">💪 @d.ExerciseName</span>
+                            <span class="kcal-val">@d.KcalBurned.ToString("0") kcal</span>
+                            @if (!string.IsNullOrEmpty(d.Notes))
+                            {
+                                <span class="kcal-notes">@d.Notes</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
     <!-- Guardar -->
     <div class="action-row">
         <button class="btn-save" @onclick="SaveSession" disabled="@(!session.Sets.Any())">
@@ -154,6 +214,13 @@
     private string errorMsg = string.Empty;
     private bool editMode = false;
 
+    // ─── IA: estimación de kcal ───────────────────────────────────────────
+    private double userWeightKg   = 70;
+    private int    durationMinutes = 60;
+    private bool   isEstimating   = false;
+    private string kcalError      = string.Empty;
+    private WorkoutAnalysisResult? workoutResult;
+
     protected override async Task OnInitializedAsync()
     {
         catalog = await WorkoutLog.GetExerciseCatalogAsync();
@@ -165,9 +232,40 @@
             var existing = all.FirstOrDefault(s => s.Id == guid);
             if (existing != null)
             {
-                session = existing;
+                session  = existing;
                 editMode = true;
             }
+        }
+    }
+
+    private async Task EstimateKcal()
+    {
+        kcalError     = string.Empty;
+        workoutResult = null;
+        isEstimating  = true;
+        StateHasChanged();
+
+        var inputs = session.Sets.Select(s => new WorkoutSetInput
+        {
+            ExerciseName = s.ExerciseName,
+            MuscleGroup  = s.MuscleGroup,
+            Sets         = s.Sets,
+            Reps         = s.Reps,
+            WeightKg     = s.WeightKg
+        }).ToList();
+
+        workoutResult = await FoodRecognition.AnalyzeWorkoutAsync(inputs, durationMinutes, userWeightKg);
+        isEstimating  = false;
+
+        if (!workoutResult.Success)
+        {
+            kcalError     = workoutResult.Error ?? "Error desconocido";
+            workoutResult = null;
+        }
+        else
+        {
+            // Guardar kcal estimadas en la sesión para que queden registradas
+            session.EstimatedKcalBurned = workoutResult.TotalKcalBurned;
         }
     }
 
@@ -197,12 +295,12 @@
     {
         session.Sets.Add(new WorkoutSet
         {
-            ExerciseId = ex.Id,
+            ExerciseId   = ex.Id,
             ExerciseName = ex.Name,
-            MuscleGroup = ex.MuscleGroup,
-            Sets = 3,
-            Reps = 10,
-            WeightKg = 0
+            MuscleGroup  = ex.MuscleGroup,
+            Sets         = 3,
+            Reps         = 10,
+            WeightKg     = 0
         });
     }
 
@@ -211,8 +309,8 @@
         session.Sets.Add(new WorkoutSet
         {
             ExerciseName = "Ejercicio",
-            Sets = 3,
-            Reps = 10
+            Sets         = 3,
+            Reps         = 10
         });
     }
 

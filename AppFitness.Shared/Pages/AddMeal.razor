@@ -12,7 +12,7 @@
 <div class="page-add-meal">
     <div class="page-header">
         <a href="food" class="btn-back">← Volver</a>
-        <h2>📸 Añadir Comida</h2>
+        <h2>🍽️ Añadir Comida</h2>
     </div>
 
     <!-- Tipo y fecha -->
@@ -35,165 +35,78 @@
         </div>
     </div>
 
-    <!-- CAMARA -->
-    <div class="card-fitness card-camera">
+    <!-- ANÁLISIS POR TEXTO (Gemini) -->
+    <div class="card-fitness">
         <div class="card-header-fitness">
-            <span class="card-icon">📷</span>
-            <span>Foto del plato</span>
+            <span class="card-icon">🤖</span>
+            <span>Analizar alimento/plato por texto</span>
         </div>
-
-        @if (string.IsNullOrEmpty(photoPreviewUrl))
+        <div class="info-banner info" style="margin-bottom:0.5rem;">
+            Solo está disponible el análisis por texto. Escribe el nombre del plato o alimento y la IA estimará las calorías y macros.
+        </div>
+        <div class="search-bar">
+            <input type="text" class="form-input-fitness" placeholder="Ej: Paella, ensalada César, arroz con pollo…"
+                   @bind="textAnalysisQuery" @bind:event="oninput" @onkeydown="HandleTextAnalysisKeydown" />
+            <button class="btn-search" @onclick="AnalyzeText" disabled="@(string.IsNullOrWhiteSpace(textAnalysisQuery) || isAnalyzing)">
+                @(isAnalyzing ? "⏳" : "🤖 Analizar")
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(textAnalysisError))
         {
-            <div class="camera-actions">
-                <button class="btn-camera" @onclick="OpenCamera" disabled="@isAnalyzing">
-                    <span class="cam-icon">📷</span>
-                    <span>Abrir cámara</span>
-                </button>
-                <button class="btn-gallery" @onclick="OpenGallery" disabled="@isAnalyzing">
-                    <span class="cam-icon">🖼️</span>
-                    <span>Galería</span>
-                </button>
-            </div>
-            <p class="camera-hint">
-                Haz una foto al plato y la IA detectará los ingredientes,
-                estimará los gramos y calculará las kcal automáticamente
-            </p>
+            <div class="info-banner warn">⚠️ @textAnalysisError</div>
         }
-        else
-        {
-            <div class="photo-container">
-                <img src="@photoPreviewUrl" class="photo-preview" alt="Foto del plato" />
-                @if (isAnalyzing)
-                {
-                    <div class="analyzing-overlay">
-                        <div class="analyzing-spinner"></div>
-                        <p>🤖 Analizando ingredientes y calculando kcal…</p>
-                    </div>
-                }
-            </div>
-            <div class="photo-retake-row">
-                <button class="btn-retake" @onclick="RetakePhoto" disabled="@isAnalyzing">
-                    📷 Nueva foto
-                </button>
-                @if (!isAnalyzing && analysisResult == null)
-                {
-                    <button class="btn-analyze" @onclick="AnalyzePhoto">
-                        🤖 Analizar
-                    </button>
-                }
-            </div>
-        }
-
-        @if (!string.IsNullOrEmpty(recognitionError))
-        {
-            <div class="info-banner warn">
-                ⚠️ @recognitionError
-
-                @if (recognitionError.Contains("429") || recognitionError.Contains("límite") || recognitionError.Contains("disponible ahora"))
-                {
-                    <div class="error-actions">
-                        <button class="btn-retry" @onclick="AnalyzePhoto" disabled="@isAnalyzing">
-                            🔄 Reintentar
-                        </button>
-                    </div>
-                }
-
-                @if (recognitionError.Contains("API key") || recognitionError.Contains("GEMINI_API_KEY"))
-                {
-                    <div style="margin-top:0.5rem;font-size:0.8rem;">
-                        👉 Obtén tu clave gratuita en
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#facc15;font-weight:600;">
-                            aistudio.google.com
-                        </a>
-                        y añádela en <strong>GitHub → Settings → Secrets → GEMINI_API_KEY</strong>
-                    </div>
-                }
-            </div>
-        }
-
-        @if (analysisResult != null && aiIngredients.Any())
+        @if (textAnalysisResult != null && textAnalysisResult.Ingredients.Any())
         {
             <div class="recognition-results">
                 <div class="dish-name-row">
-                    <span class="dish-badge">🍽️ @analysisResult.DishName</span>
+                    <span class="dish-badge">🍽️ @textAnalysisResult.DishName</span>
                     <span class="dish-total-kcal">
-                        ~@(aiIngredients.Where(v => v.Selected)
-                            .Sum(v => Math.Round(v.Ingredient.KcalPer100g * v.Grams / 100, 0))
-                            .ToString("0")) kcal seleccionados
+                        ~@(textAnalysisResult.Ingredients.Sum(i => Math.Round(i.KcalPer100g * i.EstimatedGrams / 100, 0)).ToString("0")) kcal estimadas
                     </span>
                 </div>
-
                 <p class="recognition-title">
-                    ✨ Ingredientes detectados — ajusta los gramos si es necesario:
+                    ✨ Ingredientes estimados — ajusta los gramos si es necesario:
                 </p>
-
-                @foreach (var vm in aiIngredients)
+                @foreach (var i in textAnalysisResult.Ingredients)
                 {
-                    <div class="ai-ingredient-row @(vm.Selected ? "ai-selected" : "ai-unselected")">
-                        <button class="ai-check-btn" @onclick="() => vm.Selected = !vm.Selected">
-                            @(vm.Selected ? "✅" : "⬜")
-                        </button>
-
+                    <div class="ai-ingredient-row ai-selected">
                         <div class="ai-ingredient-body">
-                            <input class="ai-name-input" @bind="vm.Ingredient.Name"
-                                   placeholder="Nombre del ingrediente" />
-
+                            <input class="ai-name-input" @bind="i.Name" placeholder="Nombre del ingrediente" />
                             <div class="ai-values-row">
                                 <div class="ai-field">
                                     <label>Gramos</label>
-                                    <input type="number" min="1" class="ai-num-input highlight"
-                                           value="@vm.Grams"
-                                           @onchange="e => OnFieldChange(e, v => vm.Grams = v)" />
+                                    <input type="number" min="1" class="ai-num-input highlight" @bind="i.EstimatedGrams" />
                                 </div>
                                 <div class="ai-field">
                                     <label>Kcal/100g</label>
-                                    <input type="number" min="0" class="ai-num-input"
-                                           value="@vm.Ingredient.KcalPer100g"
-                                           @onchange="e => OnFieldChange(e, v => vm.Ingredient.KcalPer100g = v)" />
+                                    <input type="number" min="0" class="ai-num-input" @bind="i.KcalPer100g" />
                                 </div>
                                 <div class="ai-field">
                                     <label>P/100g</label>
-                                    <input type="number" min="0" class="ai-num-input"
-                                           value="@vm.Ingredient.ProteinPer100g"
-                                           @onchange="e => OnFieldChange(e, v => vm.Ingredient.ProteinPer100g = v)" />
+                                    <input type="number" min="0" class="ai-num-input" @bind="i.ProteinPer100g" />
                                 </div>
                                 <div class="ai-field">
                                     <label>C/100g</label>
-                                    <input type="number" min="0" class="ai-num-input"
-                                           value="@vm.Ingredient.CarbsPer100g"
-                                           @onchange="e => OnFieldChange(e, v => vm.Ingredient.CarbsPer100g = v)" />
+                                    <input type="number" min="0" class="ai-num-input" @bind="i.CarbsPer100g" />
                                 </div>
                                 <div class="ai-field">
                                     <label>G/100g</label>
-                                    <input type="number" min="0" class="ai-num-input"
-                                           value="@vm.Ingredient.FatPer100g"
-                                           @onchange="e => OnFieldChange(e, v => vm.Ingredient.FatPer100g = v)" />
+                                    <input type="number" min="0" class="ai-num-input" @bind="i.FatPer100g" />
                                 </div>
                             </div>
-
                             <div class="ai-totals">
                                 <span class="ai-total-kcal">
-                                    🔥 @(Math.Round(vm.Ingredient.KcalPer100g * vm.Grams / 100, 0)) kcal
+                                    🔥 @(Math.Round(i.KcalPer100g * i.EstimatedGrams / 100, 0)) kcal
                                 </span>
-                                <span class="p-tag macro-tag">P: @(Math.Round(vm.Ingredient.ProteinPer100g * vm.Grams / 100, 1))g</span>
-                                <span class="c-tag macro-tag">C: @(Math.Round(vm.Ingredient.CarbsPer100g * vm.Grams / 100, 1))g</span>
-                                <span class="f-tag macro-tag">G: @(Math.Round(vm.Ingredient.FatPer100g * vm.Grams / 100, 1))g</span>
+                                <span class="p-tag macro-tag">P: @(Math.Round(i.ProteinPer100g * i.EstimatedGrams / 100, 1))g</span>
+                                <span class="c-tag macro-tag">C: @(Math.Round(i.CarbsPer100g * i.EstimatedGrams / 100, 1))g</span>
+                                <span class="f-tag macro-tag">G: @(Math.Round(i.FatPer100g * i.EstimatedGrams / 100, 1))g</span>
                             </div>
                         </div>
-
-                        <button class="btn-remove" @onclick="() => aiIngredients.Remove(vm)"
-                                title="Eliminar ingrediente">✕</button>
                     </div>
                 }
-
-                <button class="btn-add-manual ai-add-extra" @onclick="AddExtraAiIngredient">
-                    + Añadir ingrediente
-                </button>
-
-                <button class="btn-add-recognized"
-                        @onclick="AddAiIngredientsToMeal"
-                        disabled="@(!aiIngredients.Any(v => v.Selected))">
-                    ➕ Añadir @(aiIngredients.Count(v => v.Selected)) ingrediente(s) a la comida
+                <button class="btn-add-recognized" @onclick="AddTextAnalysisToMeal">
+                    ➕ Añadir ingredientes a la comida
                 </button>
             </div>
         }
@@ -267,7 +180,7 @@
         </div>
         @if (!selectedFoods.Any())
         {
-            <p class="empty-state">Haz una foto o busca alimentos para añadirlos aquí.</p>
+            <p class="empty-state">Analiza un alimento con IA o búscalo manualmente para añadirlo aquí.</p>
         }
         else
         {
@@ -351,13 +264,10 @@
     private string notes = string.Empty;
     private string errorMsg = string.Empty;
 
-    private string? photoPreviewUrl;
-    private byte[]? photoBytes;
-    private string photoMime = "image/jpeg";
     private bool isAnalyzing = false;
-    private string recognitionError = string.Empty;
-    private FoodAnalysisResult? analysisResult;
-    private List<AiIngredientVm> aiIngredients = new();
+    private string textAnalysisQuery = string.Empty;
+    private string textAnalysisError = string.Empty;
+    private FoodAnalysisResult? textAnalysisResult;
 
     private string searchQuery = string.Empty;
     private string lastQuery = string.Empty;
@@ -367,108 +277,51 @@
     private List<FoodItem> searchResults = new();
     private List<FoodItem> selectedFoods = new();
 
-    private class AiIngredientVm
-    {
-        public DetectedIngredient Ingredient { get; set; } = new();
-        public double Grams
-        {
-            get => Ingredient.EstimatedGrams;
-            set => Ingredient.EstimatedGrams = value;
-        }
-        public bool Selected { get; set; } = true;
-    }
-
-    protected override void OnInitialized()
-    {
-        if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var d))
-            mealDate = d;
-        if (type.HasValue && Enum.IsDefined(typeof(MealType), type.Value))
-            mealType = (MealType)type.Value;
-    }
-
-    private async Task OpenCamera()  => await CaptureImage("capturePhoto");
-    private async Task OpenGallery() => await CaptureImage("selectFromGallery");
-
-    private async Task CaptureImage(string jsMethod)
-    {
-        recognitionError = string.Empty;
-        analysisResult   = null;
-        aiIngredients    = new();
-        try
-        {
-            var result = await JS.InvokeAsync<CameraResult?>("cameraModule." + jsMethod);
-            if (result == null) return;
-            photoPreviewUrl = result.DataUrl;
-            photoMime       = result.MimeType ?? "image/jpeg";
-            photoBytes      = Convert.FromBase64String(result.Base64);
-            await AnalyzePhoto();
-        }
-        catch (Exception ex)
-        {
-            recognitionError = "No se pudo acceder a la cámara: " + ex.Message;
-        }
-    }
-
     private void RetakePhoto()
     {
-        photoPreviewUrl  = null;
-        photoBytes       = null;
-        analysisResult   = null;
-        aiIngredients    = new();
-        recognitionError = string.Empty;
+        // Método eliminado
     }
 
-    private async Task AnalyzePhoto()
+    private async Task AnalyzeText()
     {
-        if (photoBytes == null) return;
-        isAnalyzing      = true;
-        recognitionError = string.Empty;
-        analysisResult   = null;
-        aiIngredients    = new();
+        textAnalysisError = string.Empty;
+        textAnalysisResult = null;
+        isAnalyzing = true;
         StateHasChanged();
-
-        var result = await FoodRecognition.AnalyzeImageAsync(photoBytes, photoMime);
+        var result = await FoodRecognition.AnalyzeTextAsync(textAnalysisQuery);
         isAnalyzing = false;
-
         if (!result.Success)
         {
-            recognitionError = result.Error!;
+            textAnalysisError = result.Error!;
             StateHasChanged();
             return;
         }
-
-        analysisResult = result;
-        aiIngredients  = result.Ingredients
-            .Select(i => new AiIngredientVm { Ingredient = i, Selected = true })
-            .ToList();
+        textAnalysisResult = result;
         StateHasChanged();
     }
 
-    private void AddExtraAiIngredient()
+    private void AddTextAnalysisToMeal()
     {
-        aiIngredients.Add(new AiIngredientVm
-        {
-            Ingredient = new DetectedIngredient { Name = "Nuevo ingrediente", EstimatedGrams = 100 },
-            Selected   = true
-        });
-    }
-
-    private void AddAiIngredientsToMeal()
-    {
-        foreach (var vm in aiIngredients.Where(v => v.Selected))
+        if (textAnalysisResult == null) return;
+        foreach (var i in textAnalysisResult.Ingredients)
         {
             selectedFoods.Add(new FoodItem
             {
-                Name           = vm.Ingredient.Name,
-                QuantityGrams  = vm.Grams,
-                KcalPer100g    = vm.Ingredient.KcalPer100g,
-                ProteinPer100g = vm.Ingredient.ProteinPer100g,
-                CarbsPer100g   = vm.Ingredient.CarbsPer100g,
-                FatPer100g     = vm.Ingredient.FatPer100g
+                Name = i.Name,
+                QuantityGrams = i.EstimatedGrams,
+                KcalPer100g = i.KcalPer100g,
+                ProteinPer100g = i.ProteinPer100g,
+                CarbsPer100g = i.CarbsPer100g,
+                FatPer100g = i.FatPer100g
             });
         }
-        analysisResult = null;
-        aiIngredients  = new();
+        textAnalysisResult = null;
+        textAnalysisQuery = string.Empty;
+    }
+
+    private async Task HandleTextAnalysisKeydown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AnalyzeText();
     }
 
     private async Task HandleSearchKeydown(KeyboardEventArgs e)
@@ -534,17 +387,5 @@
             System.Globalization.CultureInfo.InvariantCulture, out var v))
             setter(v);
         StateHasChanged();
-    }
-
-    private class CameraResult
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("base64")]
-        public string Base64 { get; set; } = string.Empty;
-
-        [System.Text.Json.Serialization.JsonPropertyName("mimeType")]
-        public string MimeType { get; set; } = "image/jpeg";
-
-        [System.Text.Json.Serialization.JsonPropertyName("dataUrl")]
-        public string DataUrl { get; set; } = string.Empty;
     }
 }
