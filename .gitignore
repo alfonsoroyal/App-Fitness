@@ -64,6 +64,8 @@ AppFitness.Web/AppData/
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
+# Fichero local con la Gemini API key real (NO subir al repo)
+**/wwwroot/appsettings.Local.json
 *.key
 *.pem
 *.pfx
