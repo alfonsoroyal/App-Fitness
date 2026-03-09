@@ -1,0 +1,157 @@
+﻿@page "/food"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IMealLogService MealLog
+@inject IUserProfileService ProfileService
+@inject NavigationManager Nav
+
+<PageTitle>Registro de Comidas</PageTitle>
+
+<div class="page-food">
+    <div class="page-header">
+        <h2>🍽️ Registro de Comidas</h2>
+        <div class="date-nav">
+            <button class="btn-nav" @onclick="PrevDay">◀</button>
+            <span class="date-display">@selectedDate.ToString("ddd, d MMM yyyy")</span>
+            <button class="btn-nav" @onclick="NextDay" disabled="@(selectedDate.Date >= DateTime.Today)">▶</button>
+        </div>
+    </div>
+
+    <!-- Resumen del día -->
+    <div class="daily-summary-bar">
+        <div class="summary-pill">
+            <span class="pill-value">@totalKcal.ToString("0")</span>
+            <span class="pill-label">kcal</span>
+        </div>
+        <div class="summary-pill protein">
+            <span class="pill-value">@totalProtein.ToString("0")g</span>
+            <span class="pill-label">proteína</span>
+        </div>
+        <div class="summary-pill carbs">
+            <span class="pill-value">@totalCarbs.ToString("0")g</span>
+            <span class="pill-label">carbos</span>
+        </div>
+        <div class="summary-pill fat">
+            <span class="pill-value">@totalFat.ToString("0")g</span>
+            <span class="pill-label">grasa</span>
+        </div>
+    </div>
+
+    <!-- Barra de objetivo -->
+    <div class="kcal-goal-bar">
+        <div class="goal-labels">
+            <span>0 kcal</span>
+            <span class="goal-target">Objetivo: @(profile?.DailyCalorieGoal ?? 2000) kcal</span>
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar-fill @(totalKcal > (profile?.DailyCalorieGoal ?? 2000) ? "bar-over" : "bar-ok")"
+                 style="width: @Math.Min((int)(totalKcal / (profile?.DailyCalorieGoal ?? 2000) * 100), 100)%">
+            </div>
+        </div>
+    </div>
+
+    <!-- Comidas agrupadas por tipo -->
+    @foreach (MealType type in Enum.GetValues(typeof(MealType)))
+    {
+        var mealsOfType = meals.Where(m => m.MealType == type).ToList();
+        <div class="meal-group">
+            <div class="meal-group-header">
+                <span class="meal-type-badge @GetMealTypeClass(type)">@GetMealTypeEmoji(type) @type</span>
+                <span class="meal-group-kcal">@mealsOfType.Sum(m => m.TotalKcal).ToString("0") kcal</span>
+                <a href="/food/add?type=@((int)type)&date=@selectedDate.ToString("yyyy-MM-dd")" class="btn-add-small">+ Añadir</a>
+            </div>
+            @if (!mealsOfType.Any())
+            {
+                <p class="empty-meal">Sin registros</p>
+            }
+            else
+            {
+                @foreach (var meal in mealsOfType)
+                {
+                    <div class="meal-card">
+                        <div class="meal-card-top">
+                            @foreach (var food in meal.Foods)
+                            {
+                                <div class="food-row">
+                                    <span class="food-name">@food.Name</span>
+                                    <span class="food-qty">@food.QuantityGrams g</span>
+                                    <span class="food-kcal">@food.TotalKcal.ToString("0") kcal</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="meal-card-footer">
+                            <span class="macro-tag p-tag">P: @meal.TotalProtein.ToString("0")g</span>
+                            <span class="macro-tag c-tag">C: @meal.TotalCarbs.ToString("0")g</span>
+                            <span class="macro-tag f-tag">G: @meal.TotalFat.ToString("0")g</span>
+                            <button class="btn-delete" @onclick="() => DeleteMeal(meal.Id)">🗑️</button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    <div class="fab-container">
+        <a href="/food/add?date=@selectedDate.ToString("yyyy-MM-dd")" class="fab">+ Añadir comida</a>
+    </div>
+</div>
+
+@code {
+    private List<MealEntry> meals = new();
+    private UserProfile? profile;
+    private DateTime selectedDate = DateTime.Today;
+    private double totalKcal, totalProtein, totalCarbs, totalFat;
+
+    protected override async Task OnInitializedAsync()
+    {
+        profile = await ProfileService.GetAsync();
+        await LoadMeals();
+    }
+
+    private async Task LoadMeals()
+    {
+        meals = await MealLog.GetByDateAsync(selectedDate);
+        totalKcal = meals.Sum(m => m.TotalKcal);
+        totalProtein = meals.Sum(m => m.TotalProtein);
+        totalCarbs = meals.Sum(m => m.TotalCarbs);
+        totalFat = meals.Sum(m => m.TotalFat);
+    }
+
+    private async Task PrevDay()
+    {
+        selectedDate = selectedDate.AddDays(-1);
+        await LoadMeals();
+    }
+
+    private async Task NextDay()
+    {
+        if (selectedDate.Date < DateTime.Today)
+        {
+            selectedDate = selectedDate.AddDays(1);
+            await LoadMeals();
+        }
+    }
+
+    private async Task DeleteMeal(Guid id)
+    {
+        await MealLog.DeleteAsync(id);
+        await LoadMeals();
+    }
+
+    private string GetMealTypeClass(MealType type) => type switch
+    {
+        MealType.Desayuno => "badge-desayuno",
+        MealType.Almuerzo => "badge-almuerzo",
+        MealType.Cena => "badge-cena",
+        _ => "badge-snack"
+    };
+
+    private string GetMealTypeEmoji(MealType type) => type switch
+    {
+        MealType.Desayuno => "☀️",
+        MealType.Almuerzo => "🥗",
+        MealType.Cena => "🌙",
+        _ => "🍎"
+    };
+}
+

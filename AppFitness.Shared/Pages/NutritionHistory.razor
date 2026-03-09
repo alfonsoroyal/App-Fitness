@@ -1,0 +1,170 @@
+﻿@page "/food/history"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IMealLogService MealLog
+@inject IUserProfileService ProfileService
+
+<PageTitle>Historial Nutricional</PageTitle>
+
+<div class="page-history">
+    <div class="page-header">
+        <a href="/food" class="btn-back">← Volver</a>
+        <h2>📊 Historial Nutricional</h2>
+    </div>
+
+    <!-- Selector de período -->
+    <div class="period-selector">
+        <button class="period-btn @(period == 7 ? "active" : "")" @onclick='() => ChangePeriod(7)'>7 días</button>
+        <button class="period-btn @(period == 30 ? "active" : "")" @onclick='() => ChangePeriod(30)'>30 días</button>
+        <button class="period-btn @(period == 90 ? "active" : "")" @onclick='() => ChangePeriod(90)'>90 días</button>
+    </div>
+
+    <!-- Estadísticas del período -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-value">@avgKcal.ToString("0")</span>
+            <span class="stat-label">Kcal promedio/día</span>
+        </div>
+        <div class="stat-card protein">
+            <span class="stat-value">@avgProtein.ToString("0")g</span>
+            <span class="stat-label">Proteína media</span>
+        </div>
+        <div class="stat-card carbs">
+            <span class="stat-value">@avgCarbs.ToString("0")g</span>
+            <span class="stat-label">Carbos media</span>
+        </div>
+        <div class="stat-card fat">
+            <span class="stat-value">@avgFat.ToString("0")g</span>
+            <span class="stat-label">Grasa media</span>
+        </div>
+    </div>
+
+    <!-- Gráfico de barras de kcal diarias -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">🔥</span>
+            <span>Calorías diarias (últimos @period días)</span>
+        </div>
+        <div class="history-chart">
+            @foreach (var day in dailyData)
+            {
+                var pct = calorieGoal > 0 ? Math.Min((int)(day.Kcal / calorieGoal * 100), 120) : 0;
+                var barH = Math.Min(pct, 100);
+                var barClass = day.Kcal > calorieGoal ? "bar-over" : "bar-ok";
+                <div class="chart-col-h">
+                    <div class="chart-bar-wrap-h">
+                        <div class="chart-bar-h @barClass" style="height: @barH%;"
+                             title="@day.Date.ToString("dd/MM"): @day.Kcal.ToString("0") kcal">
+                        </div>
+                        @if (calorieGoal > 0)
+                        {
+                            <div class="goal-line"></div>
+                        }
+                    </div>
+                    @if (dailyData.Count <= 14)
+                    {
+                        <span class="chart-label-h">@day.Date.ToString("dd/MM")</span>
+                    }
+                    else if (dailyData.IndexOf(day) % 5 == 0)
+                    {
+                        <span class="chart-label-h">@day.Date.ToString("dd/MM")</span>
+                    }
+                    else
+                    {
+                        <span class="chart-label-h"></span>
+                    }
+                </div>
+            }
+        </div>
+        <div class="chart-legend">
+            <span class="legend-ok">■ Dentro del objetivo</span>
+            <span class="legend-over">■ Por encima</span>
+            <span class="legend-goal">— Objetivo (@calorieGoal kcal)</span>
+        </div>
+    </div>
+
+    <!-- Tabla de datos diarios -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">📋</span>
+            <span>Detalle por día</span>
+        </div>
+        <div class="data-table">
+            <div class="table-header">
+                <span>Fecha</span>
+                <span>Kcal</span>
+                <span>Proteína</span>
+                <span>Carbos</span>
+                <span>Grasa</span>
+                <span>Estado</span>
+            </div>
+            @foreach (var day in dailyData.OrderByDescending(d => d.Date).Take(30))
+            {
+                <div class="table-row">
+                    <span>@day.Date.ToString("dd/MM/yyyy")</span>
+                    <span>@day.Kcal.ToString("0")</span>
+                    <span class="protein">@day.Protein.ToString("0")g</span>
+                    <span class="carbs">@day.Carbs.ToString("0")g</span>
+                    <span class="fat">@day.Fat.ToString("0")g</span>
+                    <span>
+                        @if (day.Kcal == 0)
+                        { <span class="badge-empty">Sin datos</span> }
+                        else if (day.Kcal <= calorieGoal)
+                        { <span class="badge-ok">✅</span> }
+                        else
+                        { <span class="badge-over">⚠️ +@((day.Kcal - calorieGoal).ToString("0"))</span> }
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private int period = 7;
+    private int calorieGoal = 2000;
+    private double avgKcal, avgProtein, avgCarbs, avgFat;
+    private List<DayData> dailyData = new();
+
+    private record DayData(DateTime Date, double Kcal, double Protein, double Carbs, double Fat);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var profile = await ProfileService.GetAsync();
+        calorieGoal = profile?.DailyCalorieGoal ?? 2000;
+        await LoadData();
+    }
+
+    private async Task ChangePeriod(int days)
+    {
+        period = days;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var from = DateTime.Today.AddDays(-(period - 1));
+        var meals = await MealLog.GetByDateRangeAsync(from, DateTime.Today);
+
+        dailyData = new();
+        for (int i = period - 1; i >= 0; i--)
+        {
+            var d = DateTime.Today.AddDays(-i);
+            var dayMeals = meals.Where(m => m.Date.Date == d.Date).ToList();
+            dailyData.Add(new DayData(
+                d,
+                dayMeals.Sum(m => m.TotalKcal),
+                dayMeals.Sum(m => m.TotalProtein),
+                dayMeals.Sum(m => m.TotalCarbs),
+                dayMeals.Sum(m => m.TotalFat)
+            ));
+        }
+
+        var withData = dailyData.Where(d => d.Kcal > 0).ToList();
+        avgKcal = withData.Any() ? withData.Average(d => d.Kcal) : 0;
+        avgProtein = withData.Any() ? withData.Average(d => d.Protein) : 0;
+        avgCarbs = withData.Any() ? withData.Average(d => d.Carbs) : 0;
+        avgFat = withData.Any() ? withData.Average(d => d.Fat) : 0;
+    }
+}
+

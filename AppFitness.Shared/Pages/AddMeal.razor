@@ -1,0 +1,271 @@
+﻿@page "/food/add"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IMealLogService MealLog
+@inject INutritionSearchService NutritionSearch
+@inject NavigationManager Nav
+
+<PageTitle>Añadir Comida</PageTitle>
+
+<div class="page-add-meal">
+    <div class="page-header">
+        <a href="/food" class="btn-back">← Volver</a>
+        <h2>📸 Añadir Comida</h2>
+    </div>
+
+    <!-- Selección de tipo de comida y fecha -->
+    <div class="card-fitness">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Tipo de comida</label>
+                <select @bind="mealType" class="form-select-fitness">
+                    @foreach (MealType t in Enum.GetValues(typeof(MealType)))
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Fecha</label>
+                <input type="date" class="form-input-fitness" @bind="mealDate" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Búsqueda por foto o texto -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">🔍</span>
+            <span>Buscar alimento</span>
+        </div>
+
+        <!-- Subir imagen -->
+        <div class="photo-section">
+            <label class="photo-label">
+                📷 Detectar desde foto
+                <InputFile OnChange="HandlePhotoUpload" accept="image/*" class="hidden-input" />
+            </label>
+            @if (!string.IsNullOrEmpty(photoPreviewUrl))
+            {
+                <img src="@photoPreviewUrl" class="photo-preview" alt="Foto subida" />
+                <p class="photo-hint">Busca manualmente los alimentos detectados en la foto</p>
+            }
+        </div>
+
+        <!-- Búsqueda por nombre -->
+        <div class="search-bar">
+            <input type="text" class="form-input-fitness" placeholder="Escribe el nombre del alimento..."
+                   @bind="searchQuery" @oninput="OnSearchInput" />
+            <button class="btn-search" @onclick="SearchFood" disabled="@isSearching">
+                @(isSearching ? "Buscando..." : "Buscar")
+            </button>
+        </div>
+
+        @if (searchResults.Any())
+        {
+            <div class="search-results">
+                @foreach (var item in searchResults)
+                {
+                    <div class="search-result-item" @onclick="() => AddFromSearch(item)">
+                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            <img src="@item.ImageUrl" class="food-thumb" alt="@item.Name" />
+                        }
+                        <div class="result-info">
+                            <span class="result-name">@item.Name</span>
+                            <span class="result-kcal">@item.KcalPer100g.ToString("0") kcal/100g</span>
+                        </div>
+                        <span class="result-add">+</span>
+                    </div>
+                }
+            </div>
+        }
+        @if (searchPerformed && !searchResults.Any() && !isSearching)
+        {
+            <p class="empty-state">Sin resultados. Añade el alimento manualmente.</p>
+        }
+    </div>
+
+    <!-- Lista de alimentos añadidos -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">🧺</span>
+            <span>Alimentos en esta comida</span>
+        </div>
+
+        @if (!selectedFoods.Any())
+        {
+            <p class="empty-state">Busca o añade alimentos manualmente.</p>
+        }
+        else
+        {
+            @foreach (var food in selectedFoods)
+            {
+                <div class="selected-food-row">
+                    <div class="selected-food-info">
+                        <input class="food-name-input" @bind="food.Name" placeholder="Nombre" />
+                        <div class="food-edit-row">
+                            <div class="food-edit-field">
+                                <label>Cantidad (g)</label>
+                                <input type="number" min="1" @bind="food.QuantityGrams" class="qty-input" />
+                            </div>
+                            <div class="food-edit-field">
+                                <label>Kcal/100g</label>
+                                <input type="number" min="0" @bind="food.KcalPer100g" class="qty-input" />
+                            </div>
+                            <div class="food-edit-field">
+                                <label>P/100g</label>
+                                <input type="number" min="0" @bind="food.ProteinPer100g" class="qty-input" />
+                            </div>
+                            <div class="food-edit-field">
+                                <label>C/100g</label>
+                                <input type="number" min="0" @bind="food.CarbsPer100g" class="qty-input" />
+                            </div>
+                            <div class="food-edit-field">
+                                <label>G/100g</label>
+                                <input type="number" min="0" @bind="food.FatPer100g" class="qty-input" />
+                            </div>
+                        </div>
+                        <div class="food-totals">
+                            <span>🔥 @food.TotalKcal.ToString("0") kcal</span>
+                            <span class="protein">P: @food.TotalProtein.ToString("0")g</span>
+                            <span class="carbs">C: @food.TotalCarbs.ToString("0")g</span>
+                            <span class="fat">G: @food.TotalFat.ToString("0")g</span>
+                        </div>
+                    </div>
+                    <button class="btn-remove" @onclick="() => RemoveFood(food)">✕</button>
+                </div>
+            }
+
+            <!-- Total comida -->
+            <div class="meal-total">
+                <strong>Total: @selectedFoods.Sum(f => f.TotalKcal).ToString("0") kcal</strong>
+                <span class="macro-tag p-tag">P: @selectedFoods.Sum(f => f.TotalProtein).ToString("0")g</span>
+                <span class="macro-tag c-tag">C: @selectedFoods.Sum(f => f.TotalCarbs).ToString("0")g</span>
+                <span class="macro-tag f-tag">G: @selectedFoods.Sum(f => f.TotalFat).ToString("0")g</span>
+            </div>
+        }
+
+        <!-- Añadir alimento en blanco -->
+        <button class="btn-add-manual" @onclick="AddManualFood">+ Añadir alimento manualmente</button>
+    </div>
+
+    <!-- Notas -->
+    <div class="card-fitness">
+        <label>Notas (opcional)</label>
+        <textarea class="form-textarea-fitness" @bind="notes" placeholder="Ej: Restaurante El Rincón..."></textarea>
+    </div>
+
+    <!-- Guardar -->
+    <div class="action-row">
+        <button class="btn-save" @onclick="SaveMeal" disabled="@(!selectedFoods.Any())">
+            💾 Guardar comida
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <p class="alert-error">@errorMsg</p>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? date { get; set; }
+    [SupplyParameterFromQuery] public int? type { get; set; }
+
+    private MealType mealType = MealType.Almuerzo;
+    private DateTime mealDate = DateTime.Today;
+    private List<FoodItem> selectedFoods = new();
+    private List<FoodItem> searchResults = new();
+    private string searchQuery = string.Empty;
+    private bool isSearching = false;
+    private bool searchPerformed = false;
+    private string? photoPreviewUrl;
+    private string notes = string.Empty;
+    private string errorMsg = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var d))
+            mealDate = d;
+        if (type.HasValue && Enum.IsDefined(typeof(MealType), type.Value))
+            mealType = (MealType)type.Value;
+    }
+
+    private async Task HandlePhotoUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            photoPreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(bytes)}";
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task SearchFood()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery)) return;
+        isSearching = true;
+        searchPerformed = true;
+        searchResults = new();
+        StateHasChanged();
+        searchResults = await NutritionSearch.SearchFoodAsync(searchQuery);
+        isSearching = false;
+    }
+
+    private void AddFromSearch(FoodItem item)
+    {
+        selectedFoods.Add(new FoodItem
+        {
+            Name = item.Name,
+            KcalPer100g = item.KcalPer100g,
+            ProteinPer100g = item.ProteinPer100g,
+            CarbsPer100g = item.CarbsPer100g,
+            FatPer100g = item.FatPer100g,
+            ImageUrl = item.ImageUrl,
+            QuantityGrams = 100
+        });
+        searchResults = new();
+        searchQuery = string.Empty;
+    }
+
+    private void AddManualFood()
+    {
+        selectedFoods.Add(new FoodItem
+        {
+            Name = "Nuevo alimento",
+            QuantityGrams = 100
+        });
+    }
+
+    private void RemoveFood(FoodItem food)
+    {
+        selectedFoods.Remove(food);
+    }
+
+    private async Task SaveMeal()
+    {
+        if (!selectedFoods.Any())
+        {
+            errorMsg = "Añade al menos un alimento.";
+            return;
+        }
+        var entry = new MealEntry
+        {
+            Date = mealDate,
+            MealType = mealType,
+            Foods = new List<FoodItem>(selectedFoods),
+            Notes = notes
+        };
+        await MealLog.SaveAsync(entry);
+        Nav.NavigateTo("/food");
+    }
+}
+

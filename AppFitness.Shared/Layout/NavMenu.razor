@@ -1,0 +1,54 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">💪 AppFitness</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="nav-icon">🏠</span> Dashboard
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="food">
+                <span class="nav-icon">🍽️</span> Comidas
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="food/add">
+                <span class="nav-icon">📸</span> Añadir comida
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="food/history">
+                <span class="nav-icon">📊</span> Historial nutricional
+            </NavLink>
+        </div>
+        <hr class="nav-divider" />
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="workout">
+                <span class="nav-icon">🏋️</span> Entrenamientos
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="workout/add">
+                <span class="nav-icon">➕</span> Nuevo entreno
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="workout/history">
+                <span class="nav-icon">📈</span> Historial entrenos
+            </NavLink>
+        </div>
+        <hr class="nav-divider" />
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="profile">
+                <span class="nav-icon">👤</span> Mi perfil
+            </NavLink>
+        </div>
+    </nav>
+</div>

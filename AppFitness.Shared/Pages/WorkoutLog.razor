@@ -1,0 +1,123 @@
+﻿@page "/workout"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IWorkoutLogService WorkoutLogSvc
+@inject NavigationManager Nav
+
+<PageTitle>Registro de Entrenamientos</PageTitle>
+
+<div class="page-workout">
+    <div class="page-header">
+        <h2>💪 Entrenamientos</h2>
+        <a href="/workout/add" class="btn-primary-fitness">+ Nuevo</a>
+    </div>
+
+    @if (!sessions.Any())
+    {
+        <div class="empty-hero">
+            <span class="empty-icon">🏋️</span>
+            <p>Aún no tienes entrenamientos registrados.</p>
+            <a href="/workout/add" class="btn-primary-fitness">Empezar ahora</a>
+        </div>
+    }
+    else
+    {
+        <!-- Estadísticas globales -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <span class="stat-value">@sessions.Count</span>
+                <span class="stat-label">Sesiones totales</span>
+            </div>
+            <div class="stat-card protein">
+                <span class="stat-value">@sessions.Sum(s => s.TotalSets)</span>
+                <span class="stat-label">Series totales</span>
+            </div>
+            <div class="stat-card carbs">
+                <span class="stat-value">@sessions.Sum(s => s.TotalVolume).ToString("0") kg</span>
+                <span class="stat-label">Volumen total</span>
+            </div>
+        </div>
+
+        <!-- Lista de sesiones -->
+        @foreach (var session in sessions.OrderByDescending(s => s.Date))
+        {
+            <div class="workout-session-card" @onclick="() => ToggleSession(session.Id)">
+                <div class="session-header">
+                    <div class="session-meta">
+                        <span class="session-date">📅 @session.Date.ToString("dddd, d MMMM yyyy")</span>
+                        @if (!string.IsNullOrEmpty(session.Duration))
+                        {
+                            <span class="session-duration">⏱ @session.Duration</span>
+                        }
+                    </div>
+                    <div class="session-stats">
+                        <span class="session-sets">@session.TotalSets series</span>
+                        <span class="session-volume">@session.TotalVolume.ToString("0") kg</span>
+                    </div>
+                    <div class="session-actions">
+                        <a href="/workout/add?id=@session.Id" class="btn-edit-small" @onclick:stopPropagation="true">✏️</a>
+                        <button class="btn-delete" @onclick="() => DeleteSession(session.Id)" @onclick:stopPropagation="true">🗑️</button>
+                        <span class="expand-icon">@(expandedSession == session.Id ? "▲" : "▼")</span>
+                    </div>
+                </div>
+
+                @if (expandedSession == session.Id)
+                {
+                    <div class="session-exercises">
+                        @foreach (var set in session.Sets)
+                        {
+                            <div class="exercise-row">
+                                <div class="exercise-name-col">
+                                    <span class="exercise-name">@set.ExerciseName</span>
+                                    @if (!string.IsNullOrEmpty(set.MuscleGroup))
+                                    {
+                                        <span class="muscle-tag">@set.MuscleGroup</span>
+                                    }
+                                </div>
+                                <div class="exercise-detail-col">
+                                    <span class="set-detail">@set.Sets series × @set.Reps reps</span>
+                                    @if (set.WeightKg > 0)
+                                    {
+                                        <span class="weight-detail">⚖️ @set.WeightKg kg</span>
+                                        <span class="volume-detail">Vol: @set.Volume.ToString("0") kg</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(session.Notes))
+                        {
+                            <p class="session-notes">📝 @session.Notes</p>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<WorkoutSession> sessions = new();
+    private Guid? expandedSession;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessions();
+    }
+
+    private async Task LoadSessions()
+    {
+        sessions = await WorkoutLogSvc.GetAllAsync();
+    }
+
+    private void ToggleSession(Guid id)
+    {
+        expandedSession = expandedSession == id ? null : id;
+    }
+
+    private async Task DeleteSession(Guid id)
+    {
+        await WorkoutLogSvc.DeleteAsync(id);
+        await LoadSessions();
+    }
+}
+

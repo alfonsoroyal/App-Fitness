@@ -1,0 +1,197 @@
+﻿@page "/workout/history"
+@using AppFitness.Shared.Services
+@using AppFitness.Shared.Models
+@inject IWorkoutLogService WorkoutLog
+
+<PageTitle>Historial de Entrenamientos</PageTitle>
+
+<div class="page-history">
+    <div class="page-header">
+        <a href="/workout" class="btn-back">← Volver</a>
+        <h2>📈 Historial de Entrenamientos</h2>
+    </div>
+
+    <!-- Selector de período -->
+    <div class="period-selector">
+        <button class="period-btn @(period == 7 ? "active" : "")" @onclick='() => ChangePeriod(7)'>7 días</button>
+        <button class="period-btn @(period == 30 ? "active" : "")" @onclick='() => ChangePeriod(30)'>30 días</button>
+        <button class="period-btn @(period == 90 ? "active" : "")" @onclick='() => ChangePeriod(90)'>90 días</button>
+    </div>
+
+    <!-- Estadísticas del período -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-value">@periodSessions.Count</span>
+            <span class="stat-label">Sesiones</span>
+        </div>
+        <div class="stat-card protein">
+            <span class="stat-value">@periodSessions.Sum(s => s.TotalVolume).ToString("0") kg</span>
+            <span class="stat-label">Volumen total</span>
+        </div>
+        <div class="stat-card carbs">
+            <span class="stat-value">@(periodSessions.Any() ? (periodSessions.Sum(s => s.TotalSets) / periodSessions.Count).ToString("0") : "0")</span>
+            <span class="stat-label">Series promedio</span>
+        </div>
+    </div>
+
+    <!-- Gráfico de volumen por sesión -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">📊</span>
+            <span>Volumen por sesión</span>
+        </div>
+        @if (!periodSessions.Any())
+        {
+            <p class="empty-state">Sin datos en este período.</p>
+        }
+        else
+        {
+            var maxVol = periodSessions.Max(s => s.TotalVolume);
+            <div class="history-chart">
+                @foreach (var s in periodSessions.OrderBy(s => s.Date))
+                {
+                    var pct = maxVol > 0 ? (int)(s.TotalVolume / maxVol * 100) : 0;
+                    <div class="chart-col-h">
+                        <div class="chart-bar-wrap-h">
+                            <div class="chart-bar-h bar-workout" style="height: @pct%;"
+                                 title="@s.Date.ToString("dd/MM"): @s.TotalVolume.ToString("0") kg">
+                            </div>
+                        </div>
+                        <span class="chart-label-h">@s.Date.ToString("dd/MM")</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Records personales por ejercicio -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">🏆</span>
+            <span>Récords personales</span>
+        </div>
+        @if (!personalRecords.Any())
+        {
+            <p class="empty-state">Registra entrenamientos para ver tus records.</p>
+        }
+        else
+        {
+            <div class="pr-table">
+                <div class="pr-header">
+                    <span>Ejercicio</span>
+                    <span>Mejor peso</span>
+                    <span>Mejor volumen</span>
+                    <span>Fecha</span>
+                </div>
+                @foreach (var pr in personalRecords.OrderByDescending(p => p.MaxWeight))
+                {
+                    <div class="pr-row">
+                        <span class="pr-exercise">@pr.ExerciseName</span>
+                        <span class="pr-weight">@pr.MaxWeight kg</span>
+                        <span class="pr-volume">@pr.MaxVolume.ToString("0") kg</span>
+                        <span class="pr-date">@pr.BestDate.ToString("dd/MM/yy")</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Progresión de ejercicio específico -->
+    <div class="card-fitness">
+        <div class="card-header-fitness">
+            <span class="card-icon">📉</span>
+            <span>Progresión de ejercicio</span>
+        </div>
+        <select class="form-select-fitness" @bind="selectedExerciseFilter" @bind:after="LoadExerciseProgress">
+            <option value="">-- Selecciona un ejercicio --</option>
+            @foreach (var name in exerciseNames)
+            {
+                <option value="@name">@name</option>
+            }
+        </select>
+
+        @if (exerciseProgress.Any())
+        {
+            var maxW = exerciseProgress.Max(p => p.Weight);
+            <div class="history-chart" style="margin-top:1rem">
+                @foreach (var p in exerciseProgress)
+                {
+                    var pct = maxW > 0 ? (int)(p.Weight / maxW * 100) : 0;
+                    <div class="chart-col-h">
+                        <div class="chart-bar-wrap-h">
+                            <div class="chart-bar-h bar-progress" style="height: @pct%;"
+                                 title="@p.Date.ToString("dd/MM"): @p.Weight kg × @p.Reps reps">
+                            </div>
+                        </div>
+                        <span class="chart-label-h">@p.Date.ToString("dd/MM")</span>
+                    </div>
+                }
+            </div>
+            <p class="chart-caption">Peso utilizado (@selectedExerciseFilter)</p>
+        }
+    </div>
+</div>
+
+@code {
+    private int period = 30;
+    private List<WorkoutSession> allSessions = new();
+    private List<WorkoutSession> periodSessions = new();
+    private List<PersonalRecord> personalRecords = new();
+    private List<string> exerciseNames = new();
+    private string selectedExerciseFilter = string.Empty;
+    private List<(DateTime Date, double Weight, int Reps)> exerciseProgress = new();
+
+    private record PersonalRecord(string ExerciseName, double MaxWeight, double MaxVolume, DateTime BestDate);
+
+    protected override async Task OnInitializedAsync()
+    {
+        allSessions = await WorkoutLog.GetAllAsync();
+        exerciseNames = allSessions
+            .SelectMany(s => s.Sets.Select(ws => ws.ExerciseName))
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+        await ChangePeriod(period);
+    }
+
+    private async Task ChangePeriod(int days)
+    {
+        period = days;
+        var from = DateTime.Today.AddDays(-days);
+        periodSessions = allSessions
+            .Where(s => s.Date.Date >= from)
+            .OrderBy(s => s.Date)
+            .ToList();
+        BuildPersonalRecords();
+    }
+
+    private void BuildPersonalRecords()
+    {
+        personalRecords = allSessions
+            .SelectMany(s => s.Sets.Select(ws => new { ws.ExerciseName, ws.WeightKg, ws.Volume, s.Date }))
+            .GroupBy(x => x.ExerciseName)
+            .Select(g =>
+            {
+                var best = g.OrderByDescending(x => x.WeightKg).First();
+                var bestVol = g.Max(x => x.Volume);
+                return new PersonalRecord(g.Key, best.WeightKg, bestVol, best.Date);
+            })
+            .ToList();
+    }
+
+    private void LoadExerciseProgress()
+    {
+        if (string.IsNullOrEmpty(selectedExerciseFilter))
+        {
+            exerciseProgress = new();
+            return;
+        }
+        exerciseProgress = allSessions
+            .SelectMany(s => s.Sets
+                .Where(ws => ws.ExerciseName == selectedExerciseFilter)
+                .Select(ws => (s.Date, ws.WeightKg, ws.Reps)))
+            .OrderBy(p => p.Date)
+            .ToList();
+    }
+}
+
