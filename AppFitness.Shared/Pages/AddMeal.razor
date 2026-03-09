@@ -58,6 +58,14 @@
                 Haz una foto al plato y la IA detectará los ingredientes,
                 estimará los gramos y calculará las kcal automáticamente
             </p>
+            @if (!FoodRecognition.HasApiKey)
+            {
+                <div class="info-banner warn" style="margin-top:0.5rem;">
+                    ⚠️ Sin API key configurada. Ve a
+                    <a href="/profile" style="color:#facc15;font-weight:600;">⚙️ Perfil</a>
+                    para añadir tu clave gratuita de Gemini y activar el análisis por foto.
+                </div>
+            }
         }
         else
         {

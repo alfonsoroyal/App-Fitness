@@ -43,11 +43,14 @@ public interface INutritionSearchService
 
 public interface IFoodRecognitionService
 {
-    /// <summary>
-    /// Analiza una imagen de comida y devuelve los ingredientes detectados
-    /// con estimación de gramos, kcal totales y macronutrientes.
-    /// </summary>
+    /// <summary>Analiza una imagen de comida y devuelve ingredientes con macros estimados.</summary>
     Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType);
+
+    /// <summary>Actualiza la API key en runtime (se llama desde Settings tras guardarla en localStorage).</summary>
+    void SetApiKey(string apiKey);
+
+    /// <summary>Indica si hay una API key configurada.</summary>
+    bool HasApiKey { get; }
 }
 
 /// <summary>Resultado completo del análisis de una imagen de comida.</summary>

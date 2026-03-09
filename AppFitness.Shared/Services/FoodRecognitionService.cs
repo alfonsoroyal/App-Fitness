@@ -15,7 +15,11 @@ namespace AppFitness.Shared.Services;
 public class FoodRecognitionService : IFoodRecognitionService
 {
     private readonly HttpClient _http;
-    private readonly string _apiKey;
+    private string _apiKey;
+
+    public bool HasApiKey => !string.IsNullOrWhiteSpace(_apiKey);
+
+    public void SetApiKey(string apiKey) => _apiKey = apiKey?.Trim() ?? string.Empty;
 
     // Modelos en orden de preferencia (nombres exactos de la API v1beta)
     private static readonly string[] Models =
@@ -58,8 +62,8 @@ public class FoodRecognitionService : IFoodRecognitionService
 
     public FoodRecognitionService(HttpClient http, string apiKey)
     {
-        _http   = http;
-        _apiKey = apiKey;
+        _http    = http;
+        _apiKey  = apiKey?.Trim() ?? string.Empty;
     }
 
     public async Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType)

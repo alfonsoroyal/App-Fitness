@@ -1510,6 +1510,91 @@ html, body {
 
 /* ======================== ERROR UI ====================================== */
 /* Error UI */
+/* ── Sección API Key Gemini (Profile) ─────────────────────── */
+.card-ai-settings { border-left: 4px solid #6c63ff; }
+
+.api-key-badge {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+}
+
+.api-key-badge.ok   { background: rgba(74,222,128,0.15); color: #4ade80; }
+.api-key-badge.warn { background: rgba(249,115,22,0.15);  color: #f97316; }
+
+.ai-settings-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0.4rem 0 0.75rem;
+}
+
+.api-key-steps {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    align-items: center;
+}
+
+.api-key-steps span:nth-child(odd) {
+    font-weight: 700;
+    color: #6c63ff;
+}
+
+.link-accent { color: #a78bfa; text-decoration: underline; }
+
+.api-key-input-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.api-key-input { flex: 1; font-family: monospace; font-size: 0.85rem; letter-spacing: 0.02em; }
+
+.btn-toggle-key {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 0.75rem;
+    cursor: pointer;
+    font-size: 1.1rem;
+}
+
+.api-key-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.btn-save-key {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    background: linear-gradient(135deg, #6c63ff, #a78bfa);
+    border: none;
+    color: white;
+    border-radius: var(--radius);
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.btn-save-key:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-save-key:hover:not(:disabled) { opacity: 0.85; }
+
+.btn-remove-key {
+    padding: 0.6rem 0.9rem;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #ef4444;
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-remove-key:hover { background: rgba(239,68,68,0.2); }
+
+/* ─────────────────────────────────────────────────────────── */
+
 .blazor-error-boundary {
     background: #ef444422;
     border: 1px solid #ef4444;
