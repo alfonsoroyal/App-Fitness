@@ -202,15 +202,19 @@
 
     protected override async Task OnInitializedAsync()
     {
-        profile = await ProfileService.GetAsync();
-
-        // Cargar la key guardada en localStorage para mostrarla en el input
-        var stored = await Storage.GetAsync<string>("gemini_api_key");
-        if (!string.IsNullOrWhiteSpace(stored))
+        try
         {
-            geminiKeyInput = stored;
-            FoodRecognition.SetApiKey(stored);
+            profile = await ProfileService.GetAsync();
+
+            // Cargar la key guardada en localStorage para mostrarla en el input
+            var stored = await Storage.GetAsync<string>("gemini_api_key");
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                geminiKeyInput = stored;
+                FoodRecognition.SetApiKey(stored);
+            }
         }
+        catch { }
     }
 
     private async Task SaveApiKey()

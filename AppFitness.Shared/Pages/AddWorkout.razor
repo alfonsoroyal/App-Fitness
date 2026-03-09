@@ -223,19 +223,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        catalog = await WorkoutLog.GetExerciseCatalogAsync();
-        filteredExercises = catalog;
-
-        if (!string.IsNullOrEmpty(id) && Guid.TryParse(id, out var guid))
+        try
         {
-            var all = await WorkoutLog.GetAllAsync();
-            var existing = all.FirstOrDefault(s => s.Id == guid);
-            if (existing != null)
+            catalog = await WorkoutLog.GetExerciseCatalogAsync();
+            filteredExercises = catalog;
+
+            if (!string.IsNullOrEmpty(id) && Guid.TryParse(id, out var guid))
             {
-                session  = existing;
-                editMode = true;
+                var all = await WorkoutLog.GetAllAsync();
+                var existing = all.FirstOrDefault(s => s.Id == guid);
+                if (existing != null)
+                {
+                    session  = existing;
+                    editMode = true;
+                }
             }
         }
+        catch { }
     }
 
     private async Task EstimateKcal()

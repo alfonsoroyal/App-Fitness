@@ -101,7 +101,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadSessions();
+        try { await LoadSessions(); } catch { }
     }
 
     private async Task LoadSessions()

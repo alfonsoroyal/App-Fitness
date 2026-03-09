@@ -18,7 +18,8 @@ public enum MealType
 {
     Desayuno,
     Almuerzo,
-    Cena,
-    Snack
+    Comida,
+    Merienda,
+    Cena
 }
 

@@ -130,9 +130,13 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var profile = await ProfileService.GetAsync();
-        calorieGoal = profile?.DailyCalorieGoal ?? 2000;
-        await LoadData();
+        try
+        {
+            var profile = await ProfileService.GetAsync();
+            calorieGoal = profile?.DailyCalorieGoal ?? 2000;
+            await LoadData();
+        }
+        catch { }
     }
 
     private async Task ChangePeriod(int days)

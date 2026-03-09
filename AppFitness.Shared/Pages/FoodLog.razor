@@ -104,8 +104,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        profile = await ProfileService.GetAsync();
-        await LoadMeals();
+        try
+        {
+            profile = await ProfileService.GetAsync();
+            await LoadMeals();
+        }
+        catch { }
     }
 
     private async Task LoadMeals()
@@ -142,16 +146,20 @@
     {
         MealType.Desayuno => "badge-desayuno",
         MealType.Almuerzo => "badge-almuerzo",
-        MealType.Cena => "badge-cena",
-        _ => "badge-snack"
+        MealType.Comida   => "badge-comida",
+        MealType.Merienda => "badge-merienda",
+        MealType.Cena     => "badge-cena",
+        _                 => "badge-snack"
     };
 
     private string GetMealTypeEmoji(MealType type) => type switch
     {
         MealType.Desayuno => "☀️",
         MealType.Almuerzo => "🥗",
-        MealType.Cena => "🌙",
-        _ => "🍎"
+        MealType.Comida   => "🍽️",
+        MealType.Merienda => "🍎",
+        MealType.Cena     => "🌙",
+        _                 => "🍴"
     };
 }
 
