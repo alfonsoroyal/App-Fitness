@@ -88,16 +88,25 @@
         {
             <div class="info-banner warn">
                 ⚠️ @recognitionError
-                @if (recognitionError.Contains("API key"))
+
+                @if (recognitionError.Contains("429") || recognitionError.Contains("límite") || recognitionError.Contains("disponible ahora"))
                 {
-                    <br />
-                    <small>
-                        Consigue tu clave gratuita en
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#facc15">
+                    <div class="error-actions">
+                        <button class="btn-retry" @onclick="AnalyzePhoto" disabled="@isAnalyzing">
+                            🔄 Reintentar
+                        </button>
+                    </div>
+                }
+
+                @if (recognitionError.Contains("API key") || recognitionError.Contains("GEMINI_API_KEY"))
+                {
+                    <div style="margin-top:0.5rem;font-size:0.8rem;">
+                        👉 Obtén tu clave gratuita en
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#facc15;font-weight:600;">
                             aistudio.google.com
                         </a>
-                        y ponla en <code>FoodRecognitionService.cs</code>
-                    </small>
+                        y añádela en <strong>GitHub → Settings → Secrets → GEMINI_API_KEY</strong>
+                    </div>
                 }
             </div>
         }

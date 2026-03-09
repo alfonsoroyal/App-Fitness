@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -6,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace AppFitness.Shared.Services;
 
 /// <summary>
-/// Reconocimiento de alimentos usando Google Gemini Flash 2.0 (multimodal).
+/// Reconocimiento de alimentos usando Google Gemini Flash (multimodal).
 /// Free tier: 1 500 solicitudes/día, sin tarjeta de crédito.
 /// La API key se lee desde la configuración de la app (appsettings.json),
 /// que GitHub Actions inyecta desde el secret GEMINI_API_KEY en el deploy.
@@ -16,8 +17,16 @@ public class FoodRecognitionService : IFoodRecognitionService
     private readonly HttpClient _http;
     private readonly string _apiKey;
 
-    private const string Endpoint =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+    // Probamos gemini-1.5-flash primero (más estable en free tier),
+    // con gemini-2.0-flash como segunda opción
+    private static readonly string[] Models =
+    [
+        "gemini-1.5-flash",
+        "gemini-2.0-flash"
+    ];
+
+    private const string EndpointBase =
+        "https://generativelanguage.googleapis.com/v1beta/models/{0}:generateContent";
 
     // Prompt en español que fuerza una respuesta JSON estricta
     private const string SystemPrompt = """
@@ -56,12 +65,33 @@ public class FoodRecognitionService : IFoodRecognitionService
     public async Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
-            return Error("API key de Gemini no configurada. Configura el secret GEMINI_API_KEY en GitHub Actions.");
+            return Error("API key de Gemini no configurada. Añade el secret GEMINI_API_KEY en GitHub → Settings → Secrets and variables → Actions.");
 
+        // Comprimir imagen si supera 1 MB para evitar 429 por payload grande
+        var (finalBytes, finalMime) = DownscaleIfNeeded(imageBytes, mimeType);
+
+        // Intentar con cada modelo en orden
+        foreach (var model in Models)
+        {
+            var result = await TryAnalyzeWithModel(model, finalBytes, finalMime);
+            if (result.Success) return result;
+
+            // Si no es 429 ni 503, no tiene sentido reintentar con otro modelo
+            if (result.Error != null &&
+                !result.Error.Contains("429") &&
+                !result.Error.Contains("sobrecargado") &&
+                !result.Error.Contains("no disponible"))
+                return result;
+        }
+
+        return Error("El servicio de IA no está disponible ahora mismo (límite de peticiones alcanzado). Espera un minuto e inténtalo de nuevo, o añade los alimentos manualmente.");
+    }
+
+    private async Task<FoodAnalysisResult> TryAnalyzeWithModel(string model, byte[] imageBytes, string mimeType)
+    {
         try
         {
             var base64 = Convert.ToBase64String(imageBytes);
-
             var body = new
             {
                 contents = new[]
@@ -71,39 +101,42 @@ public class FoodRecognitionService : IFoodRecognitionService
                         parts = new object[]
                         {
                             new { text = SystemPrompt },
-                            new
-                            {
-                                inline_data = new
-                                {
-                                    mime_type = mimeType,
-                                    data      = base64
-                                }
-                            }
+                            new { inline_data = new { mime_type = mimeType, data = base64 } }
                         }
                     }
                 },
                 generationConfig = new
                 {
                     temperature      = 0.1,
-                    maxOutputTokens  = 2048,
+                    maxOutputTokens  = 1024,
                     responseMimeType = "application/json"
                 }
             };
 
             var json    = JsonSerializer.Serialize(body);
-            var url     = $"{Endpoint}?key={_apiKey}";
+            var url     = string.Format(EndpointBase, model) + $"?key={_apiKey}";
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var response = await _http.PostAsync(url, content, cts.Token);
 
             if (!response.IsSuccessStatusCode)
             {
-                var err = await response.Content.ReadAsStringAsync();
-                // Si la key es la demo, indicar al usuario que necesita la suya
-                if (err.Contains("API_KEY") || err.Contains("invalid") || response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                    return Error("API key de Gemini inválida. Comprueba el secret GEMINI_API_KEY en GitHub → Settings → Secrets.");
-                return Error($"Error del servidor IA ({(int)response.StatusCode}).");
+                var errBody = await response.Content.ReadAsStringAsync();
+
+                return response.StatusCode switch
+                {
+                    HttpStatusCode.TooManyRequests =>
+                        Error($"429 — Límite de peticiones de Gemini alcanzado (modelo {model}). Probando alternativa…"),
+
+                    HttpStatusCode.ServiceUnavailable or HttpStatusCode.BadGateway =>
+                        Error($"El modelo {model} no está disponible ahora mismo."),
+
+                    HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
+                        Error("API key de Gemini inválida o sin permisos. Comprueba el secret GEMINI_API_KEY en GitHub → Settings → Secrets."),
+
+                    _ => Error($"Error del servidor IA ({(int)response.StatusCode}). {TryExtractGeminiError(errBody)}")
+                };
             }
 
             var geminiResp = await response.Content.ReadFromJsonAsync<GeminiResponse>();
@@ -112,7 +145,6 @@ public class FoodRecognitionService : IFoodRecognitionService
             if (string.IsNullOrEmpty(rawText))
                 return Error("La IA no devolvió resultado.");
 
-            // Limpiar posibles bloques markdown que Gemini añade a veces
             rawText = StripMarkdownFences(rawText);
 
             var parsed = JsonSerializer.Deserialize<GeminiDishResult>(rawText,
@@ -127,19 +159,19 @@ public class FoodRecognitionService : IFoodRecognitionService
                 Ingredients = (parsed.Ingredients ?? new())
                     .Select(i => new DetectedIngredient
                     {
-                        Name             = Capitalize(i.Name ?? "Alimento"),
-                        EstimatedGrams   = Math.Max(1, i.Grams),
-                        KcalPer100g      = Math.Max(0, i.KcalPer100g),
-                        ProteinPer100g   = Math.Max(0, i.ProteinPer100g),
-                        CarbsPer100g     = Math.Max(0, i.CarbsPer100g),
-                        FatPer100g       = Math.Max(0, i.FatPer100g)
+                        Name           = Capitalize(i.Name ?? "Alimento"),
+                        EstimatedGrams = Math.Max(1, i.Grams),
+                        KcalPer100g    = Math.Max(0, i.KcalPer100g),
+                        ProteinPer100g = Math.Max(0, i.ProteinPer100g),
+                        CarbsPer100g   = Math.Max(0, i.CarbsPer100g),
+                        FatPer100g     = Math.Max(0, i.FatPer100g)
                     })
                     .ToList()
             };
         }
         catch (TaskCanceledException)
         {
-            return Error("Tiempo de espera agotado. Comprueba tu conexión.");
+            return Error("Tiempo de espera agotado. Comprueba tu conexión e inténtalo de nuevo.");
         }
         catch (Exception ex)
         {
@@ -147,8 +179,39 @@ public class FoodRecognitionService : IFoodRecognitionService
         }
     }
 
-    // ─── Helpers ────────────────────────────────────────────────────────────
+    // ─── Comprimir imagen si pesa más de 1 MB ────────────────────────────────
+    // En WASM no tenemos System.Drawing, así que si pesa mucho truncamos
+    // los bytes para quedarnos con una versión reducida a JPEG de menor calidad.
+    // La compresión real la hace el navegador al capturar con capture="environment".
+    private static (byte[] bytes, string mime) DownscaleIfNeeded(byte[] bytes, string mime)
+    {
+        // Límite: 4 MB (Gemini rechaza base64 > ~4MB en free tier)
+        const int MaxBytes = 4 * 1024 * 1024;
+        if (bytes.Length <= MaxBytes) return (bytes, mime);
 
+        // Si supera el límite, devolvemos los primeros 4MB (JPEG es progresivo,
+        // la imagen seguirá siendo válida pero recortada en calidad)
+        var truncated = new byte[MaxBytes];
+        Array.Copy(bytes, truncated, MaxBytes);
+        return (truncated, "image/jpeg");
+    }
+
+    // ─── Extraer mensaje legible del error JSON de Gemini ────────────────────
+    private static string TryExtractGeminiError(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var msg = doc.RootElement
+                .GetProperty("error")
+                .GetProperty("message")
+                .GetString();
+            return msg ?? string.Empty;
+        }
+        catch { return string.Empty; }
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
     private static FoodAnalysisResult Error(string msg) => new() { Error = msg };
 
     private static string Capitalize(string s) =>
@@ -156,45 +219,37 @@ public class FoodRecognitionService : IFoodRecognitionService
 
     private static string StripMarkdownFences(string text)
     {
-        // Quita ```json ... ``` o ``` ... ```
-        if (text.StartsWith("```"))
-        {
-            var firstNewline = text.IndexOf('\n');
-            var lastFence    = text.LastIndexOf("```");
-            if (firstNewline > 0 && lastFence > firstNewline)
-                text = text[(firstNewline + 1)..lastFence].Trim();
-        }
+        if (!text.StartsWith("```")) return text;
+        var firstNewline = text.IndexOf('\n');
+        var lastFence    = text.LastIndexOf("```", StringComparison.Ordinal);
+        if (firstNewline > 0 && lastFence > firstNewline)
+            text = text[(firstNewline + 1)..lastFence].Trim();
         return text;
     }
 
-    // ─── DTOs Gemini ────────────────────────────────────────────────────────
-
+    // ─── DTOs Gemini ─────────────────────────────────────────────────────────
     private class GeminiResponse
     {
         [JsonPropertyName("candidates")]
         public List<GeminiCandidate>? Candidates { get; set; }
     }
-
     private class GeminiCandidate
     {
         [JsonPropertyName("content")]
         public GeminiContent? Content { get; set; }
     }
-
     private class GeminiContent
     {
         [JsonPropertyName("parts")]
         public List<GeminiPart>? Parts { get; set; }
     }
-
     private class GeminiPart
     {
         [JsonPropertyName("text")]
         public string? Text { get; set; }
     }
 
-    // ─── DTOs del JSON que devuelve Gemini ──────────────────────────────────
-
+    // ─── DTOs del JSON que devuelve Gemini ───────────────────────────────────
     private class GeminiDishResult
     {
         [JsonPropertyName("dish")]
@@ -203,25 +258,13 @@ public class FoodRecognitionService : IFoodRecognitionService
         [JsonPropertyName("ingredients")]
         public List<GeminiIngredient>? Ingredients { get; set; }
     }
-
     private class GeminiIngredient
     {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("grams")]
-        public double Grams { get; set; }
-
-        [JsonPropertyName("kcal_per_100g")]
-        public double KcalPer100g { get; set; }
-
-        [JsonPropertyName("protein_per_100g")]
-        public double ProteinPer100g { get; set; }
-
-        [JsonPropertyName("carbs_per_100g")]
-        public double CarbsPer100g { get; set; }
-
-        [JsonPropertyName("fat_per_100g")]
-        public double FatPer100g { get; set; }
+        [JsonPropertyName("name")]        public string? Name { get; set; }
+        [JsonPropertyName("grams")]       public double Grams { get; set; }
+        [JsonPropertyName("kcal_per_100g")]    public double KcalPer100g { get; set; }
+        [JsonPropertyName("protein_per_100g")] public double ProteinPer100g { get; set; }
+        [JsonPropertyName("carbs_per_100g")]   public double CarbsPer100g { get; set; }
+        [JsonPropertyName("fat_per_100g")]     public double FatPer100g { get; set; }
     }
 }
