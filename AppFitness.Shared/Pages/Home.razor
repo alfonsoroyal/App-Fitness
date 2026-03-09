@@ -62,7 +62,7 @@
         <div class="card-header-fitness">
             <span class="card-icon">🍽️</span>
             <span>Comidas de hoy</span>
-            <a href="/food/add" class="btn-add">+ Añadir</a>
+            <a href="food/add" class="btn-add">+ Añadir</a>
         </div>
         @if (!todayMeals.Any())
         {
@@ -86,7 +86,7 @@
         <div class="card-header-fitness">
             <span class="card-icon">📊</span>
             <span>Últimos 7 días</span>
-            <a href="/food/history" class="btn-add">Ver más</a>
+            <a href="food/history" class="btn-add">Ver más</a>
         </div>
         <div class="week-chart">
             @foreach (var day in weekData)
@@ -110,7 +110,7 @@
         <div class="card-header-fitness">
             <span class="card-icon">💪</span>
             <span>Último entrenamiento</span>
-            <a href="/workout/add" class="btn-add">+ Nuevo</a>
+            <a href="workout/add" class="btn-add">+ Nuevo</a>
         </div>
         @if (lastWorkout == null)
         {
@@ -135,9 +135,9 @@
 
     <!-- Accesos rápidos -->
     <div class="quick-actions">
-        <a href="/food/add" class="quick-btn btn-food">📸 Registrar comida</a>
-        <a href="/workout/add" class="quick-btn btn-workout">🏋️ Nuevo entreno</a>
-        <a href="/profile" class="quick-btn btn-profile">👤 Mi perfil</a>
+        <a href="food/add" class="quick-btn btn-food">📸 Registrar comida</a>
+        <a href="workout/add" class="quick-btn btn-workout">🏋️ Nuevo entreno</a>
+        <a href="profile" class="quick-btn btn-profile">👤 Mi perfil</a>
     </div>
 </div>
 

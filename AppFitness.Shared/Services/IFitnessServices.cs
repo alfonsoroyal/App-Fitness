@@ -41,3 +41,14 @@ public interface INutritionSearchService
     Task<List<FoodItem>> SearchFoodAsync(string query);
 }
 
+public interface IFoodRecognitionService
+{
+    /// <summary>
+    /// Recibe los bytes de una imagen y devuelve una lista de nombres de alimentos detectados
+    /// junto con su confianza (0-1), ordenados de mayor a menor confianza.
+    /// </summary>
+    Task<List<RecognizedFood>> RecognizeAsync(byte[] imageBytes, string mimeType);
+}
+
+public record RecognizedFood(string Name, double Confidence);
+

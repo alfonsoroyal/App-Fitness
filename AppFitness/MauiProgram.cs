@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿﻿using Microsoft.Extensions.Logging;
 using AppFitness.Shared.Services;
 using AppFitness.Services;
 
@@ -30,6 +30,9 @@ public static class MauiProgram
         {
             client.DefaultRequestHeaders.Add("User-Agent", "AppFitness/1.0");
         });
+
+        // HttpClient para reconocimiento de alimentos con Clarifai
+        builder.Services.AddHttpClient<IFoodRecognitionService, FoodRecognitionService>();
 
         builder.Services.AddMauiBlazorWebView();
 

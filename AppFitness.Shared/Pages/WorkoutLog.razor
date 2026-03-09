@@ -9,7 +9,7 @@
 <div class="page-workout">
     <div class="page-header">
         <h2>💪 Entrenamientos</h2>
-        <a href="/workout/add" class="btn-primary-fitness">+ Nuevo</a>
+        <a href="workout/add" class="btn-primary-fitness">+ Nuevo</a>
     </div>
 
     @if (!sessions.Any())
@@ -17,7 +17,7 @@
         <div class="empty-hero">
             <span class="empty-icon">🏋️</span>
             <p>Aún no tienes entrenamientos registrados.</p>
-            <a href="/workout/add" class="btn-primary-fitness">Empezar ahora</a>
+            <a href="workout/add" class="btn-primary-fitness">Empezar ahora</a>
         </div>
     }
     else
@@ -55,7 +55,7 @@
                         <span class="session-volume">@session.TotalVolume.ToString("0") kg</span>
                     </div>
                     <div class="session-actions">
-                        <a href="/workout/add?id=@session.Id" class="btn-edit-small" @onclick:stopPropagation="true">✏️</a>
+                        <a href="workout/add?id=@session.Id" class="btn-edit-small" @onclick:stopPropagation="true">✏️</a>
                         <button class="btn-delete" @onclick="() => DeleteSession(session.Id)" @onclick:stopPropagation="true">🗑️</button>
                         <span class="expand-icon">@(expandedSession == session.Id ? "▲" : "▼")</span>
                     </div>

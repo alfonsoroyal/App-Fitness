@@ -58,7 +58,7 @@
             <div class="meal-group-header">
                 <span class="meal-type-badge @GetMealTypeClass(type)">@GetMealTypeEmoji(type) @type</span>
                 <span class="meal-group-kcal">@mealsOfType.Sum(m => m.TotalKcal).ToString("0") kcal</span>
-                <a href="/food/add?type=@((int)type)&date=@selectedDate.ToString("yyyy-MM-dd")" class="btn-add-small">+ Añadir</a>
+                <a href="food/add?type=@((int)type)&date=@selectedDate.ToString("yyyy-MM-dd")" class="btn-add-small">+ Añadir</a>
             </div>
             @if (!mealsOfType.Any())
             {
@@ -92,7 +92,7 @@
     }
 
     <div class="fab-container">
-        <a href="/food/add?date=@selectedDate.ToString("yyyy-MM-dd")" class="fab">+ Añadir comida</a>
+        <a href="food/add?date=@selectedDate.ToString("yyyy-MM-dd")" class="fab">+ Añadir comida</a>
     </div>
 </div>
 

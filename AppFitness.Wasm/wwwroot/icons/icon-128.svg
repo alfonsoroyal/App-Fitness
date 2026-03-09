@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1d2e" /><stop offset="100%" style="stop-color:#0f1117" />
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6c63ff" /><stop offset="100%" style="stop-color:#a78bfa" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="64" fill="url(#bgGrad)" />
+  <rect x="28" y="59" width="72" height="10" rx="5" fill="url(#barGrad)" />
+  <rect x="18" y="49" width="16" height="30" rx="5" fill="#ff6584" />
+  <rect x="94" y="49" width="16" height="30" rx="5" fill="#ff6584" />
+  <rect x="34" y="53" width="10" height="22" rx="4" fill="#ff6584" opacity="0.7" />
+  <rect x="84" y="53" width="10" height="22" rx="4" fill="#ff6584" opacity="0.7" />
+  <rect x="44" y="56" width="7" height="16" rx="3" fill="#facc15" />
+  <rect x="77" y="56" width="7" height="16" rx="3" fill="#facc15" />
+  <text x="64" y="108" font-family="'Arial Black',sans-serif" font-weight="900"
+        font-size="22" text-anchor="middle" fill="url(#barGrad)">AF</text>
+</svg>
+

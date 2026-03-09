@@ -1,0 +1,62 @@
+{
+  "name": "AppFitness – Tu Gym en el Bolsillo",
+  "short_name": "AppFitness",
+  "description": "Registra tus entrenamientos, comidas y progreso físico. Tu app de fitness personal.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1117",
+  "theme_color": "#6c63ff",
+  "lang": "es",
+  "categories": ["fitness", "health", "sports"],
+  "icons": [
+    {
+      "src": "icons/icon-72.svg",
+      "sizes": "72x72",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-96.svg",
+      "sizes": "96x96",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-128.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Añadir Comida",
+      "short_name": "Comida",
+      "description": "Registrar una nueva comida",
+      "url": "./food/add",
+      "icons": [{ "src": "icons/icon-96.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Nuevo Entrenamiento",
+      "short_name": "Entreno",
+      "description": "Registrar un entrenamiento",
+      "url": "./workout/add",
+      "icons": [{ "src": "icons/icon-96.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    }
+  ]
+}

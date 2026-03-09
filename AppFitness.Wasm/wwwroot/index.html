@@ -4,13 +4,30 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>App Fitness</title>
+    <title>AppFitness – Tu Gym en el Bolsillo</title>
     <base href="/" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json" />
+
+    <!-- Theme & icons -->
+    <meta name="theme-color" content="#6c63ff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AppFitness" />
+    <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+    <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg" />
+
+    <!-- SEO / Open Graph -->
+    <meta name="description" content="Registra tus entrenamientos, comidas y progreso físico. Tu app de fitness personal." />
+    <meta name="keywords" content="fitness, gym, dieta, entrenamientos, calorías, macros" />
+
+    <!-- Preload -->
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="_content/AppFitness.Shared/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="_content/AppFitness.Shared/app.css" />
-    <link rel="icon" type="image/png" href="_content/AppFitness.Shared/favicon.png" />
     <link href="AppFitness.Wasm.styles.css" rel="stylesheet" />
+
     <script type="importmap"></script>
     <script>
         // Handle redirect from 404.html for GitHub Pages SPA routing
@@ -26,11 +43,17 @@
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100vh;background:#0f1117;gap:1.5rem;">
+            <img src="icons/icon-192.svg" width="80" height="80" alt="AppFitness" />
+            <svg class="loading-progress" style="width:80px;height:80px;">
+                <circle r="38%" cx="50%" cy="50%" />
+                <circle r="38%" cx="50%" cy="50%" />
+            </svg>
+            <p style="color:#94a3b8;font-family:sans-serif;font-size:.9rem;margin:0;">
+                Cargando AppFitness…
+            </p>
+        </div>
     </div>
 
     <div id="blazor-error-ui">
@@ -38,6 +61,8 @@
         <a href="." class="reload">Recargar</a>
         <span class="dismiss">🗙</span>
     </div>
+
+    <script src="camera.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 
