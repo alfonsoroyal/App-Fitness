@@ -1457,6 +1457,25 @@ html, body {
     color: #f97316;
 }
 
+.error-actions {
+    margin-top: 0.5rem;
+}
+
+.btn-retry {
+    background: rgba(249,115,22,0.2);
+    border: 1px solid rgba(249,115,22,0.5);
+    color: #f97316;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.btn-retry:hover:not(:disabled) { background: rgba(249,115,22,0.35); }
+.btn-retry:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* Badge kcal en cabecera de card */
 .meal-kcal-badge {
     margin-left: auto;
