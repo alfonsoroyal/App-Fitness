@@ -2,4 +2,5 @@
   <Project Path="AppFitness.Shared/AppFitness.Shared.csproj" />
   <Project Path="AppFitness.Web/AppFitness.Web.csproj" />
   <Project Path="AppFitness/AppFitness.csproj" />
+  <Project Path="AppFitness.Wasm/AppFitness.Wasm.csproj" />
 </Solution>
