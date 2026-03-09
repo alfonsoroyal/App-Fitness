@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Fondo circular con gradiente morado oscuro -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1d2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f1117;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6c63ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a78bfa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="plateGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6584;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#cc4466;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)" />
+
+  <!-- Borde sutil -->
+  <circle cx="256" cy="256" r="248" fill="none" stroke="#6c63ff" stroke-width="4" opacity="0.4" />
+
+  <!-- MANCUERNA - barra central -->
+  <rect x="116" y="240" width="280" height="32" rx="16" fill="url(#barGrad)" />
+
+  <!-- Disco izquierdo exterior grande -->
+  <rect x="80" y="200" width="52" height="112" rx="12" fill="url(#plateGrad)" />
+  <!-- Disco izquierdo interior -->
+  <rect x="132" y="215" width="32" height="82" rx="8" fill="#ff6584" opacity="0.7" />
+
+  <!-- Disco derecho interior -->
+  <rect x="348" y="215" width="32" height="82" rx="8" fill="#ff6584" opacity="0.7" />
+  <!-- Disco derecho exterior grande -->
+  <rect x="380" y="200" width="52" height="112" rx="12" fill="url(#plateGrad)" />
+
+  <!-- Collarín izquierdo -->
+  <rect x="160" y="226" width="20" height="60" rx="6" fill="#facc15" />
+  <!-- Collarín derecho -->
+  <rect x="332" y="226" width="20" height="60" rx="6" fill="#facc15" />
+
+  <!-- Texto "AF" centrado abajo -->
+  <text x="256" y="390" font-family="'Arial Black', sans-serif" font-weight="900"
+        font-size="72" text-anchor="middle" fill="url(#barGrad)" opacity="0.9">AF</text>
+
+  <!-- Pequeños puntos decorativos de brillo -->
+  <circle cx="256" cy="140" r="6" fill="#6c63ff" opacity="0.5" />
+  <circle cx="180" cy="150" r="4" fill="#a78bfa" opacity="0.4" />
+  <circle cx="332" cy="150" r="4" fill="#a78bfa" opacity="0.4" />
+</svg>
+

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1d2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f1117;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6c63ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a78bfa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="plateGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6584;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#cc4466;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="96" cy="96" r="96" fill="url(#bgGrad)" />
+  <circle cx="96" cy="96" r="92" fill="none" stroke="#6c63ff" stroke-width="2" opacity="0.4" />
+  <!-- Barra central -->
+  <rect x="43" y="89" width="106" height="14" rx="7" fill="url(#barGrad)" />
+  <!-- Discos exteriores -->
+  <rect x="28" y="73" width="22" height="46" rx="6" fill="url(#plateGrad)" />
+  <rect x="142" y="73" width="22" height="46" rx="6" fill="url(#plateGrad)" />
+  <!-- Discos interiores -->
+  <rect x="50" y="79" width="14" height="34" rx="5" fill="#ff6584" opacity="0.7" />
+  <rect x="128" y="79" width="14" height="34" rx="5" fill="#ff6584" opacity="0.7" />
+  <!-- Collarines -->
+  <rect x="64" y="84" width="9" height="24" rx="3" fill="#facc15" />
+  <rect x="119" y="84" width="9" height="24" rx="3" fill="#facc15" />
+  <!-- Texto AF -->
+  <text x="96" y="158" font-family="'Arial Black', sans-serif" font-weight="900"
+        font-size="30" text-anchor="middle" fill="url(#barGrad)">AF</text>
+</svg>
+

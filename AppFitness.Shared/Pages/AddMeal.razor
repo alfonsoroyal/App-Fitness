@@ -9,7 +9,7 @@
 
 <div class="page-add-meal">
     <div class="page-header">
-        <a href="/food" class="btn-back">← Volver</a>
+        <a href="food" class="btn-back">← Volver</a>
         <h2>📸 Añadir Comida</h2>
     </div>
 
@@ -42,24 +42,32 @@
         <!-- Subir imagen -->
         <div class="photo-section">
             <label class="photo-label">
-                📷 Detectar desde foto
+                📷 Añadir foto de la comida
                 <InputFile OnChange="HandlePhotoUpload" accept="image/*" class="hidden-input" />
             </label>
             @if (!string.IsNullOrEmpty(photoPreviewUrl))
             {
                 <img src="@photoPreviewUrl" class="photo-preview" alt="Foto subida" />
-                <p class="photo-hint">Busca manualmente los alimentos detectados en la foto</p>
+                <p class="photo-hint">✅ Foto añadida. Busca los alimentos manualmente abajo.</p>
             }
         </div>
 
         <!-- Búsqueda por nombre -->
         <div class="search-bar">
             <input type="text" class="form-input-fitness" placeholder="Escribe el nombre del alimento..."
-                   @bind="searchQuery" @oninput="OnSearchInput" />
+                   @bind="searchQuery" @bind:event="oninput"
+                   @onkeydown="HandleSearchKeydown" />
             <button class="btn-search" @onclick="SearchFood" disabled="@isSearching">
-                @(isSearching ? "Buscando..." : "Buscar")
+                @(isSearching ? "⏳" : "🔍 Buscar")
             </button>
         </div>
+
+        @if (apiUnavailable)
+        {
+            <div class="info-banner">
+                📴 Búsqueda online no disponible. Mostrando catálogo local.
+            </div>
+        }
 
         @if (searchResults.Any())
         {
@@ -69,11 +77,21 @@
                     <div class="search-result-item" @onclick="() => AddFromSearch(item)">
                         @if (!string.IsNullOrEmpty(item.ImageUrl))
                         {
-                            <img src="@item.ImageUrl" class="food-thumb" alt="@item.Name" />
+                            <img src="@item.ImageUrl" class="food-thumb" alt="@item.Name"
+                                 onerror="this.style.display='none'" />
+                        }
+                        else
+                        {
+                            <span class="food-thumb-placeholder">🍽️</span>
                         }
                         <div class="result-info">
                             <span class="result-name">@item.Name</span>
-                            <span class="result-kcal">@item.KcalPer100g.ToString("0") kcal/100g</span>
+                            <span class="result-macros">
+                                🔥 @item.KcalPer100g.ToString("0") kcal &nbsp;
+                                P: @item.ProteinPer100g.ToString("0")g &nbsp;
+                                C: @item.CarbsPer100g.ToString("0")g &nbsp;
+                                G: @item.FatPer100g.ToString("0")g
+                            </span>
                         </div>
                         <span class="result-add">+</span>
                     </div>
@@ -82,7 +100,7 @@
         }
         @if (searchPerformed && !searchResults.Any() && !isSearching)
         {
-            <p class="empty-state">Sin resultados. Añade el alimento manualmente.</p>
+            <p class="empty-state">Sin resultados para "@lastQuery". Añade el alimento manualmente ↓</p>
         }
     </div>
 
@@ -91,6 +109,10 @@
         <div class="card-header-fitness">
             <span class="card-icon">🧺</span>
             <span>Alimentos en esta comida</span>
+            @if (selectedFoods.Any())
+            {
+                <span class="meal-kcal-badge">@selectedFoods.Sum(f => f.TotalKcal).ToString("0") kcal</span>
+            }
         </div>
 
         @if (!selectedFoods.Any())
@@ -103,7 +125,7 @@
             {
                 <div class="selected-food-row">
                     <div class="selected-food-info">
-                        <input class="food-name-input" @bind="food.Name" placeholder="Nombre" />
+                        <input class="food-name-input" @bind="food.Name" placeholder="Nombre del alimento" />
                         <div class="food-edit-row">
                             <div class="food-edit-field">
                                 <label>Cantidad (g)</label>
@@ -133,7 +155,7 @@
                             <span class="fat">G: @food.TotalFat.ToString("0")g</span>
                         </div>
                     </div>
-                    <button class="btn-remove" @onclick="() => RemoveFood(food)">✕</button>
+                    <button class="btn-remove" @onclick="() => RemoveFood(food)" title="Eliminar">✕</button>
                 </div>
             }
 
@@ -178,8 +200,10 @@
     private List<FoodItem> selectedFoods = new();
     private List<FoodItem> searchResults = new();
     private string searchQuery = string.Empty;
+    private string lastQuery = string.Empty;
     private bool isSearching = false;
     private bool searchPerformed = false;
+    private bool apiUnavailable = false;
     private string? photoPreviewUrl;
     private string notes = string.Empty;
     private string errorMsg = string.Empty;
@@ -195,18 +219,20 @@
     private async Task HandlePhotoUpload(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file != null)
+        if (file == null) return;
+        try
         {
             using var ms = new MemoryStream();
-            await file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024).CopyToAsync(ms);
+            await file.OpenReadStream(maxAllowedSize: 8 * 1024 * 1024).CopyToAsync(ms);
             var bytes = ms.ToArray();
             photoPreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(bytes)}";
         }
+        catch { /* archivo muy grande u otro error, ignorar */ }
     }
 
-    private async Task OnSearchInput(ChangeEventArgs e)
+    private async Task HandleSearchKeydown(KeyboardEventArgs e)
     {
-        searchQuery = e.Value?.ToString() ?? string.Empty;
+        if (e.Key == "Enter") await SearchFood();
     }
 
     private async Task SearchFood()
@@ -214,9 +240,18 @@
         if (string.IsNullOrWhiteSpace(searchQuery)) return;
         isSearching = true;
         searchPerformed = true;
+        lastQuery = searchQuery;
         searchResults = new();
+        apiUnavailable = false;
         StateHasChanged();
-        searchResults = await NutritionSearch.SearchFoodAsync(searchQuery);
+
+        var results = await NutritionSearch.SearchFoodAsync(searchQuery);
+
+        // Detectar si vienen del catálogo local (fallback) comparando con catálogo
+        // La API devuelve resultados locales solo si hubo error
+        apiUnavailable = results.Any() && results.All(r => r.ImageUrl == null);
+
+        searchResults = results;
         isSearching = false;
     }
 
@@ -234,21 +269,16 @@
         });
         searchResults = new();
         searchQuery = string.Empty;
+        searchPerformed = false;
+        apiUnavailable = false;
     }
 
     private void AddManualFood()
     {
-        selectedFoods.Add(new FoodItem
-        {
-            Name = "Nuevo alimento",
-            QuantityGrams = 100
-        });
+        selectedFoods.Add(new FoodItem { Name = "Nuevo alimento", QuantityGrams = 100 });
     }
 
-    private void RemoveFood(FoodItem food)
-    {
-        selectedFoods.Remove(food);
-    }
+    private void RemoveFood(FoodItem food) => selectedFoods.Remove(food);
 
     private async Task SaveMeal()
     {
@@ -265,7 +295,6 @@
             Notes = notes
         };
         await MealLog.SaveAsync(entry);
-        Nav.NavigateTo("/food");
+        Nav.NavigateTo("food");
     }
 }
-
