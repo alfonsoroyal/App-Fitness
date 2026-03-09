@@ -24,18 +24,24 @@ builder.Services.AddHttpClient<INutritionSearchService, NutritionSearchService>(
     client.DefaultRequestHeaders.Add("User-Agent", "AppFitness/1.0");
 });
 
-// Leer el array de API keys desde appsettings.json
-// En GitHub Actions se inyectan desde el secret GEMINI_API_KEYS (comas como separador)
-// También acepta el antiguo formato de una sola key (GeminiApiKey) por compatibilidad
+// Leer las API keys de Gemini desde appsettings.json
+// GitHub Actions inyecta el secret GEMINI_API_KEY (con comas) como array en GeminiApiKeys
+// También acepta GeminiApiKey (singular) por compatibilidad
 var geminiKeys = builder.Configuration.GetSection("GeminiApiKeys").Get<string[]>()
                  ?? Array.Empty<string>();
 
 if (geminiKeys.Length == 0)
 {
-    // Compatibilidad hacia atrás con key única
-    var singleKey = builder.Configuration["GeminiApiKey"] ?? string.Empty;
-    if (!string.IsNullOrWhiteSpace(singleKey))
-        geminiKeys = new[] { singleKey };
+    // Fallback: clave única o múltiples separadas por coma en GeminiApiKey
+    var raw = builder.Configuration["GeminiApiKey"] ?? string.Empty;
+    if (!string.IsNullOrWhiteSpace(raw))
+    {
+        geminiKeys = raw
+            .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(k => k.Trim())
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .ToArray();
+    }
 }
 
 var foodHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
