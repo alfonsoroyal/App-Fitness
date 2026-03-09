@@ -1,146 +1,221 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AppFitness.Shared.Models;
 
 namespace AppFitness.Shared.Services;
 
 /// <summary>
-/// Reconocimiento de alimentos en imágenes usando la API pública de Clarifai
-/// (modelo food-item-recognition, free tier: 1000 operaciones/mes).
-/// Documentación: https://clarifai.com/clarifai/main/models/food-item-recognition
+/// Reconocimiento de alimentos usando Google Gemini Flash 2.0 (multimodal).
+/// Free tier: 1 500 solicitudes/día, sin tarjeta de crédito.
+/// Obtén tu API key gratis en https://aistudio.google.com/app/apikey
 /// </summary>
 public class FoodRecognitionService : IFoodRecognitionService
 {
     private readonly HttpClient _http;
 
-    // API Key de Clarifai (Personal Access Token público de demo)
-    // El usuario puede sustituirla por la suya en https://clarifai.com (registro gratuito)
-    private const string ClarifaiPat = "a6809d08d3e142ca9c2f3fa1dc012daa";
-    private const string ModelUrl =
-        "https://api.clarifai.com/v2/models/food-item-recognition/versions/1d5fd481e0cf4826aa72ec3ff049e4d5/outputs";
+    // Clave gratuita de Google AI Studio — sustitúyela por la tuya si caduca
+    // https://aistudio.google.com/app/apikey  (registro con cuenta Google, sin coste)
+    private const string ApiKey = "AIzaSyDemo_ReplaceWithYourFreeGeminiKey";
+    private const string Endpoint =
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-    // Mapeo de términos en inglés a español para mejorar la búsqueda nutricional
-    private static readonly Dictionary<string, string> EnToEs = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["apple"] = "manzana", ["banana"] = "plátano", ["orange"] = "naranja",
-        ["strawberry"] = "fresa", ["grape"] = "uva", ["watermelon"] = "sandía",
-        ["pineapple"] = "piña", ["mango"] = "mango", ["peach"] = "melocotón",
-        ["lemon"] = "limón", ["cherry"] = "cereza", ["pear"] = "pera",
-        ["chicken"] = "pollo", ["beef"] = "ternera", ["pork"] = "cerdo",
-        ["fish"] = "pescado", ["salmon"] = "salmón", ["tuna"] = "atún",
-        ["egg"] = "huevo", ["cheese"] = "queso", ["milk"] = "leche",
-        ["yogurt"] = "yogur", ["butter"] = "mantequilla",
-        ["rice"] = "arroz", ["pasta"] = "pasta", ["bread"] = "pan",
-        ["potato"] = "patata", ["tomato"] = "tomate", ["lettuce"] = "lechuga",
-        ["carrot"] = "zanahoria", ["broccoli"] = "brócoli", ["spinach"] = "espinacas",
-        ["onion"] = "cebolla", ["garlic"] = "ajo", ["pepper"] = "pimiento",
-        ["mushroom"] = "champiñón", ["cucumber"] = "pepino", ["corn"] = "maíz",
-        ["pizza"] = "pizza", ["hamburger"] = "hamburguesa", ["sandwich"] = "sándwich",
-        ["salad"] = "ensalada", ["soup"] = "sopa", ["steak"] = "filete",
-        ["sushi"] = "sushi", ["taco"] = "taco", ["burrito"] = "burrito",
-        ["cake"] = "tarta", ["cookie"] = "galleta", ["chocolate"] = "chocolate",
-        ["ice cream"] = "helado", ["donut"] = "donut",
-        ["coffee"] = "café", ["tea"] = "té", ["juice"] = "zumo",
-        ["almonds"] = "almendras", ["walnuts"] = "nueces", ["peanut"] = "cacahuete",
-        ["oatmeal"] = "avena", ["cereal"] = "cereales",
-        ["avocado"] = "aguacate", ["beans"] = "judías", ["lentils"] = "lentejas",
-    };
+    // Prompt en español que fuerza una respuesta JSON estricta
+    private const string SystemPrompt = """
+        Eres un nutricionista experto en análisis visual de alimentos.
+        Analiza la imagen y devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto,
+        sin explicaciones adicionales, sin markdown, solo el JSON:
+
+        {
+          "dish": "nombre del plato o comida detectada",
+          "ingredients": [
+            {
+              "name": "nombre del ingrediente en español",
+              "grams": número estimado de gramos en el plato,
+              "kcal_per_100g": número,
+              "protein_per_100g": número,
+              "carbs_per_100g": número,
+              "fat_per_100g": número
+            }
+          ]
+        }
+
+        Reglas:
+        - Estima los gramos de cada ingrediente visible en el plato (porción real, no 100g).
+        - Los valores nutricionales son por 100g (valores estándar de referencia).
+        - Incluye todos los ingredientes visibles, incluso guarniciones pequeñas.
+        - Si no puedes identificar un ingrediente concreto, usa el genérico más cercano.
+        - Responde SOLO con el JSON, sin ningún texto antes o después.
+        """;
 
     public FoodRecognitionService(HttpClient http) => _http = http;
 
-    public async Task<List<RecognizedFood>> RecognizeAsync(byte[] imageBytes, string mimeType)
+    public async Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType)
     {
         try
         {
             var base64 = Convert.ToBase64String(imageBytes);
-            var requestBody = new
+
+            var body = new
             {
-                user_app_id = new { user_id = "clarifai", app_id = "main" },
-                inputs = new[]
+                contents = new[]
                 {
                     new
                     {
-                        data = new
+                        parts = new object[]
                         {
-                            image = new { base64 = base64 }
+                            new { text = SystemPrompt },
+                            new
+                            {
+                                inline_data = new
+                                {
+                                    mime_type = mimeType,
+                                    data      = base64
+                                }
+                            }
                         }
                     }
+                },
+                generationConfig = new
+                {
+                    temperature      = 0.1,
+                    maxOutputTokens  = 2048,
+                    responseMimeType = "application/json"
                 }
             };
 
-            var json = JsonSerializer.Serialize(requestBody);
-            using var request = new HttpRequestMessage(HttpMethod.Post, ModelUrl);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Key", ClarifaiPat);
-            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            var json    = JsonSerializer.Serialize(body);
+            var url     = $"{Endpoint}?key={ApiKey}";
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            var response = await _http.SendAsync(request, cts.Token);
+            using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var response = await _http.PostAsync(url, content, cts.Token);
 
             if (!response.IsSuccessStatusCode)
-                return GetFallbackRecognition();
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                // Si la key es la demo, indicar al usuario que necesita la suya
+                if (err.Contains("API_KEY") || err.Contains("invalid") || response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    return Error("Necesitas configurar tu API key de Gemini gratuita en FoodRecognitionService.cs (ver comentarios).");
+                return Error($"Error del servidor IA ({(int)response.StatusCode}).");
+            }
 
-            var result = await response.Content.ReadFromJsonAsync<ClarifaiResponse>();
-            if (result?.Outputs == null || result.Outputs.Count == 0)
-                return GetFallbackRecognition();
+            var geminiResp = await response.Content.ReadFromJsonAsync<GeminiResponse>();
+            var rawText    = geminiResp?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
 
-            var concepts = result.Outputs[0]?.Data?.Concepts;
-            if (concepts == null || concepts.Count == 0)
-                return GetFallbackRecognition();
+            if (string.IsNullOrEmpty(rawText))
+                return Error("La IA no devolvió resultado.");
 
-            return concepts
-                .Where(c => c.Value >= 0.15) // solo con ≥15% de confianza
-                .OrderByDescending(c => c.Value)
-                .Take(8)
-                .Select(c => new RecognizedFood(TranslateName(c.Name ?? ""), c.Value))
-                .Where(r => !string.IsNullOrEmpty(r.Name))
-                .ToList();
+            // Limpiar posibles bloques markdown que Gemini añade a veces
+            rawText = StripMarkdownFences(rawText);
+
+            var parsed = JsonSerializer.Deserialize<GeminiDishResult>(rawText,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (parsed == null)
+                return Error("No se pudo interpretar la respuesta de la IA.");
+
+            return new FoodAnalysisResult
+            {
+                DishName    = parsed.Dish ?? "Plato detectado",
+                Ingredients = (parsed.Ingredients ?? new())
+                    .Select(i => new DetectedIngredient
+                    {
+                        Name             = Capitalize(i.Name ?? "Alimento"),
+                        EstimatedGrams   = Math.Max(1, i.Grams),
+                        KcalPer100g      = Math.Max(0, i.KcalPer100g),
+                        ProteinPer100g   = Math.Max(0, i.ProteinPer100g),
+                        CarbsPer100g     = Math.Max(0, i.CarbsPer100g),
+                        FatPer100g       = Math.Max(0, i.FatPer100g)
+                    })
+                    .ToList()
+            };
         }
-        catch
+        catch (TaskCanceledException)
         {
-            return GetFallbackRecognition();
+            return Error("Tiempo de espera agotado. Comprueba tu conexión.");
+        }
+        catch (Exception ex)
+        {
+            return Error($"Error inesperado: {ex.Message}");
         }
     }
 
-    private static string TranslateName(string name)
+    // ─── Helpers ────────────────────────────────────────────────────────────
+
+    private static FoodAnalysisResult Error(string msg) => new() { Error = msg };
+
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    private static string StripMarkdownFences(string text)
     {
-        if (EnToEs.TryGetValue(name, out var es)) return es;
-        // Capitalizar primera letra
-        if (string.IsNullOrEmpty(name)) return name;
-        return char.ToUpperInvariant(name[0]) + name[1..].ToLowerInvariant();
+        // Quita ```json ... ``` o ``` ... ```
+        if (text.StartsWith("```"))
+        {
+            var firstNewline = text.IndexOf('\n');
+            var lastFence    = text.LastIndexOf("```");
+            if (firstNewline > 0 && lastFence > firstNewline)
+                text = text[(firstNewline + 1)..lastFence].Trim();
+        }
+        return text;
     }
 
-    private static List<RecognizedFood> GetFallbackRecognition() => new();
+    // ─── DTOs Gemini ────────────────────────────────────────────────────────
 
-    // ─── DTOs Clarifai ───────────────────────────────────────────────────────
-
-    private class ClarifaiResponse
+    private class GeminiResponse
     {
-        [JsonPropertyName("outputs")]
-        public List<ClarifaiOutput>? Outputs { get; set; }
+        [JsonPropertyName("candidates")]
+        public List<GeminiCandidate>? Candidates { get; set; }
     }
 
-    private class ClarifaiOutput
+    private class GeminiCandidate
     {
-        [JsonPropertyName("data")]
-        public ClarifaiData? Data { get; set; }
+        [JsonPropertyName("content")]
+        public GeminiContent? Content { get; set; }
     }
 
-    private class ClarifaiData
+    private class GeminiContent
     {
-        [JsonPropertyName("concepts")]
-        public List<ClarifaiConcept>? Concepts { get; set; }
+        [JsonPropertyName("parts")]
+        public List<GeminiPart>? Parts { get; set; }
     }
 
-    private class ClarifaiConcept
+    private class GeminiPart
+    {
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+    }
+
+    // ─── DTOs del JSON que devuelve Gemini ──────────────────────────────────
+
+    private class GeminiDishResult
+    {
+        [JsonPropertyName("dish")]
+        public string? Dish { get; set; }
+
+        [JsonPropertyName("ingredients")]
+        public List<GeminiIngredient>? Ingredients { get; set; }
+    }
+
+    private class GeminiIngredient
     {
         [JsonPropertyName("name")]
         public string? Name { get; set; }
 
-        [JsonPropertyName("value")]
-        public double Value { get; set; }
+        [JsonPropertyName("grams")]
+        public double Grams { get; set; }
+
+        [JsonPropertyName("kcal_per_100g")]
+        public double KcalPer100g { get; set; }
+
+        [JsonPropertyName("protein_per_100g")]
+        public double ProteinPer100g { get; set; }
+
+        [JsonPropertyName("carbs_per_100g")]
+        public double CarbsPer100g { get; set; }
+
+        [JsonPropertyName("fat_per_100g")]
+        public double FatPer100g { get; set; }
     }
 }
-
