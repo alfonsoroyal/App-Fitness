@@ -17,12 +17,12 @@ public class FoodRecognitionService : IFoodRecognitionService
     private readonly HttpClient _http;
     private readonly string _apiKey;
 
-    // Probamos gemini-1.5-flash primero (más estable en free tier),
-    // con gemini-2.0-flash como segunda opción
+    // Modelos en orden de preferencia (nombres exactos de la API v1beta)
     private static readonly string[] Models =
     [
-        "gemini-1.5-flash",
-        "gemini-2.0-flash"
+        "gemini-1.5-flash-latest",   // alias estable, siempre disponible
+        "gemini-2.0-flash",          // más nuevo, puede estar limitado en free tier
+        "gemini-1.5-flash-8b"        // versión ligera, muy rápida
     ];
 
     private const string EndpointBase =

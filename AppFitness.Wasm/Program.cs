@@ -26,10 +26,10 @@ builder.Services.AddHttpClient<INutritionSearchService, NutritionSearchService>(
 
 // HttpClient para reconocimiento de alimentos con Gemini (key desde appsettings.json)
 var geminiApiKey = builder.Configuration["GeminiApiKey"] ?? string.Empty;
-builder.Services.AddHttpClient<IFoodRecognitionService, FoodRecognitionService>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-}).AddTypedClient<IFoodRecognitionService>(
-    (http, _) => new FoodRecognitionService(http, geminiApiKey));
+
+// Factory manual: evita que DI intente resolver 'string' del constructor
+var foodHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+builder.Services.AddSingleton<IFoodRecognitionService>(
+    new FoodRecognitionService(foodHttpClient, geminiApiKey));
 
 await builder.Build().RunAsync();
