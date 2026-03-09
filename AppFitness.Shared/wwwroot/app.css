@@ -917,6 +917,54 @@ html, body {
     margin: 0.5rem 0;
 }
 
+/* ─── Estimación kcal entrenamiento IA ─── */
+.kcal-result {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.kcal-total-badge {
+    background: linear-gradient(135deg, rgba(255,107,53,0.2), rgba(255,180,50,0.15));
+    border: 1px solid rgba(255,107,53,0.4);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    font-size: 1.2rem;
+    color: var(--color-fat);
+    text-align: center;
+}
+
+.kcal-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.kcal-exercise {
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 120px;
+}
+
+.kcal-val {
+    font-weight: 700;
+    color: var(--color-fat);
+    white-space: nowrap;
+}
+
+.kcal-notes {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    width: 100%;
+    margin-top: 0.1rem;
+}
+
 /* Exercise catalog */
 .catalog-search { margin-bottom: 0.5rem; }
 

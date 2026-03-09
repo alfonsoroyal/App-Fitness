@@ -23,5 +23,8 @@ public class WorkoutSession
     public double TotalVolume => Sets.Sum(s => s.Volume);
     public int TotalSets => Sets.Sum(s => s.Sets);
     public string Duration { get; set; } = string.Empty;
+
+    /// <summary>Calorías quemadas estimadas por la IA (0 si no se ha calculado).</summary>
+    public double EstimatedKcalBurned { get; set; }
 }
 

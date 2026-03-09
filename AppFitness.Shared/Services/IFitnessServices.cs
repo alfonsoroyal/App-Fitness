@@ -43,17 +43,53 @@ public interface INutritionSearchService
 
 public interface IFoodRecognitionService
 {
-    /// <summary>Analiza una imagen de comida y devuelve ingredientes con macros estimados.</summary>
-    Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType);
-
-    /// <summary>Actualiza la API key en runtime (se llama desde Settings tras guardarla en localStorage).</summary>
+    /// <summary>Actualiza la API key en runtime.</summary>
     void SetApiKey(string apiKey);
 
     /// <summary>Indica si hay una API key configurada.</summary>
     bool HasApiKey { get; }
+
+    /// <summary>Establece el modelo a utilizar.</summary>
+    void SetModel(string model);
+
+    /// <summary>Lista los modelos disponibles.</summary>
+    Task<List<string>> ListAvailableModelsAsync();
+
+    /// <summary>Analiza un texto descriptivo de comida y devuelve ingredientes con macros estimados.</summary>
+    Task<FoodAnalysisResult> AnalyzeTextAsync(string description);
+
+    /// <summary>Estima las kcal quemadas a partir de los ejercicios de una sesión.</summary>
+    Task<WorkoutAnalysisResult> AnalyzeWorkoutAsync(List<WorkoutSetInput> sets, int durationMinutes, double userWeightKg);
 }
 
-/// <summary>Resultado completo del análisis de una imagen de comida.</summary>
+/// <summary>Datos de entrada de un ejercicio para el análisis de calorías.</summary>
+public class WorkoutSetInput
+{
+    public string ExerciseName { get; set; } = string.Empty;
+    public string MuscleGroup  { get; set; } = string.Empty;
+    public int    Sets         { get; set; }
+    public int    Reps         { get; set; }
+    public double WeightKg     { get; set; }
+}
+
+/// <summary>Resultado del análisis de calorías quemadas en un entrenamiento.</summary>
+public class WorkoutAnalysisResult
+{
+    public double TotalKcalBurned { get; set; }
+    public List<ExerciseKcalDetail> Details { get; set; } = new();
+    public string? Error  { get; set; }
+    public bool    Success => Error == null;
+}
+
+/// <summary>Detalle de calorías quemadas por ejercicio.</summary>
+public class ExerciseKcalDetail
+{
+    public string ExerciseName  { get; set; } = string.Empty;
+    public double KcalBurned    { get; set; }
+    public string Notes         { get; set; } = string.Empty;
+}
+
+/// <summary>Resultado del análisis de un plato o alimento.</summary>
 public class FoodAnalysisResult
 {
     /// <summary>Nombre o descripción del plato detectado (ej: "Ensalada César").</summary>
@@ -68,7 +104,7 @@ public class FoodAnalysisResult
     public bool Success => Error == null;
 }
 
-/// <summary>Un ingrediente detectado en la foto con estimación de cantidad y macros.</summary>
+/// <summary>Un ingrediente detectado con estimación de cantidad y macros.</summary>
 public class DetectedIngredient
 {
     public string Name { get; set; } = string.Empty;
@@ -76,7 +112,6 @@ public class DetectedIngredient
     /// <summary>Gramos estimados de este ingrediente en el plato.</summary>
     public double EstimatedGrams { get; set; } = 100;
 
-    /// <summary>Kcal por 100 g de este ingrediente.</summary>
     public double KcalPer100g { get; set; }
     public double ProteinPer100g { get; set; }
     public double CarbsPer100g { get; set; }
@@ -88,7 +123,3 @@ public class DetectedIngredient
     public double TotalCarbs   => Math.Round(CarbsPer100g   * EstimatedGrams / 100, 1);
     public double TotalFat     => Math.Round(FatPer100g     * EstimatedGrams / 100, 1);
 }
-
-// Mantener por compatibilidad
-public record RecognizedFood(string Name, double Confidence);
-

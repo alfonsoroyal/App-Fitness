@@ -119,6 +119,10 @@
             <button class="btn-save" @onclick="SaveProfile">💾 Guardar perfil</button>
         </div>
 
+        <div class="action-row">
+            <a class="btn-secondary-fitness" href="/configuracion-ia">⚙️ Configuración IA Gemini</a>
+        </div>
+
         @if (!string.IsNullOrEmpty(saveMsg))
         {
             <p class="alert-success">@saveMsg</p>
@@ -293,4 +297,3 @@
         _ => level.ToString()
     };
 }
-
