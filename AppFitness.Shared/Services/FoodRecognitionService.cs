@@ -8,15 +8,14 @@ namespace AppFitness.Shared.Services;
 /// <summary>
 /// Reconocimiento de alimentos usando Google Gemini Flash 2.0 (multimodal).
 /// Free tier: 1 500 solicitudes/día, sin tarjeta de crédito.
-/// Obtén tu API key gratis en https://aistudio.google.com/app/apikey
+/// La API key se lee desde la configuración de la app (appsettings.json),
+/// que GitHub Actions inyecta desde el secret GEMINI_API_KEY en el deploy.
 /// </summary>
 public class FoodRecognitionService : IFoodRecognitionService
 {
     private readonly HttpClient _http;
+    private readonly string _apiKey;
 
-    // Clave gratuita de Google AI Studio — sustitúyela por la tuya si caduca
-    // https://aistudio.google.com/app/apikey  (registro con cuenta Google, sin coste)
-    private const string ApiKey = "AIzaSyDemo_ReplaceWithYourFreeGeminiKey";
     private const string Endpoint =
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
@@ -48,10 +47,17 @@ public class FoodRecognitionService : IFoodRecognitionService
         - Responde SOLO con el JSON, sin ningún texto antes o después.
         """;
 
-    public FoodRecognitionService(HttpClient http) => _http = http;
+    public FoodRecognitionService(HttpClient http, string apiKey)
+    {
+        _http   = http;
+        _apiKey = apiKey;
+    }
 
     public async Task<FoodAnalysisResult> AnalyzeImageAsync(byte[] imageBytes, string mimeType)
     {
+        if (string.IsNullOrWhiteSpace(_apiKey))
+            return Error("API key de Gemini no configurada. Configura el secret GEMINI_API_KEY en GitHub Actions.");
+
         try
         {
             var base64 = Convert.ToBase64String(imageBytes);
@@ -85,7 +91,7 @@ public class FoodRecognitionService : IFoodRecognitionService
             };
 
             var json    = JsonSerializer.Serialize(body);
-            var url     = $"{Endpoint}?key={ApiKey}";
+            var url     = $"{Endpoint}?key={_apiKey}";
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             using var cts      = new CancellationTokenSource(TimeSpan.FromSeconds(25));
@@ -96,7 +102,7 @@ public class FoodRecognitionService : IFoodRecognitionService
                 var err = await response.Content.ReadAsStringAsync();
                 // Si la key es la demo, indicar al usuario que necesita la suya
                 if (err.Contains("API_KEY") || err.Contains("invalid") || response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                    return Error("Necesitas configurar tu API key de Gemini gratuita en FoodRecognitionService.cs (ver comentarios).");
+                    return Error("API key de Gemini inválida. Comprueba el secret GEMINI_API_KEY en GitHub → Settings → Secrets.");
                 return Error($"Error del servidor IA ({(int)response.StatusCode}).");
             }
 

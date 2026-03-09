@@ -24,7 +24,12 @@ builder.Services.AddHttpClient<INutritionSearchService, NutritionSearchService>(
     client.DefaultRequestHeaders.Add("User-Agent", "AppFitness/1.0");
 });
 
-// HttpClient for Clarifai food recognition
-builder.Services.AddHttpClient<IFoodRecognitionService, FoodRecognitionService>();
+// HttpClient para reconocimiento de alimentos con Gemini (key desde appsettings.json)
+var geminiApiKey = builder.Configuration["GeminiApiKey"] ?? string.Empty;
+builder.Services.AddHttpClient<IFoodRecognitionService, FoodRecognitionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+}).AddTypedClient<IFoodRecognitionService>(
+    (http, _) => new FoodRecognitionService(http, geminiApiKey));
 
 await builder.Build().RunAsync();
