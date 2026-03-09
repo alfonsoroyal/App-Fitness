@@ -24,12 +24,22 @@ builder.Services.AddHttpClient<INutritionSearchService, NutritionSearchService>(
     client.DefaultRequestHeaders.Add("User-Agent", "AppFitness/1.0");
 });
 
-// HttpClient para reconocimiento de alimentos con Gemini (key desde appsettings.json)
-var geminiApiKey = builder.Configuration["GeminiApiKey"] ?? string.Empty;
+// Leer el array de API keys desde appsettings.json
+// En GitHub Actions se inyectan desde el secret GEMINI_API_KEYS (comas como separador)
+// También acepta el antiguo formato de una sola key (GeminiApiKey) por compatibilidad
+var geminiKeys = builder.Configuration.GetSection("GeminiApiKeys").Get<string[]>()
+                 ?? Array.Empty<string>();
 
-// Factory manual: evita que DI intente resolver 'string' del constructor
+if (geminiKeys.Length == 0)
+{
+    // Compatibilidad hacia atrás con key única
+    var singleKey = builder.Configuration["GeminiApiKey"] ?? string.Empty;
+    if (!string.IsNullOrWhiteSpace(singleKey))
+        geminiKeys = new[] { singleKey };
+}
+
 var foodHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 builder.Services.AddSingleton<IFoodRecognitionService>(
-    new FoodRecognitionService(foodHttpClient, geminiApiKey));
+    new FoodRecognitionService(foodHttpClient, geminiKeys));
 
 await builder.Build().RunAsync();
