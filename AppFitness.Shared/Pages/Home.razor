@@ -151,23 +151,30 @@
 
     protected override async Task OnInitializedAsync()
     {
-        profile = await ProfileService.GetAsync();
-        todayMeals = await MealLog.GetByDateAsync(DateTime.Today);
-        todayKcal = todayMeals.Sum(m => m.TotalKcal);
-        todayProtein = todayMeals.Sum(m => m.TotalProtein);
-        todayCarbs = todayMeals.Sum(m => m.TotalCarbs);
-        todayFat = todayMeals.Sum(m => m.TotalFat);
-        remaining = (profile?.DailyCalorieGoal ?? 2000) - todayKcal;
-
-        var sessions = await WorkoutLog.GetAllAsync();
-        lastWorkout = sessions.OrderByDescending(s => s.Date).FirstOrDefault();
-
-        weekData = new();
-        for (int i = 6; i >= 0; i--)
+        try
         {
-            var d = DateTime.Today.AddDays(-i);
-            var kcal = await MealLog.GetDailyKcalAsync(d);
-            weekData.Add((d.ToString("ddd"), kcal));
+            profile = await ProfileService.GetAsync();
+            todayMeals = await MealLog.GetByDateAsync(DateTime.Today);
+            todayKcal = todayMeals.Sum(m => m.TotalKcal);
+            todayProtein = todayMeals.Sum(m => m.TotalProtein);
+            todayCarbs = todayMeals.Sum(m => m.TotalCarbs);
+            todayFat = todayMeals.Sum(m => m.TotalFat);
+            remaining = (profile?.DailyCalorieGoal ?? 2000) - todayKcal;
+
+            var sessions = await WorkoutLog.GetAllAsync();
+            lastWorkout = sessions.OrderByDescending(s => s.Date).FirstOrDefault();
+
+            weekData = new();
+            for (int i = 6; i >= 0; i--)
+            {
+                var d = DateTime.Today.AddDays(-i);
+                var kcal = await MealLog.GetDailyKcalAsync(d);
+                weekData.Add((d.ToString("ddd"), kcal));
+            }
+        }
+        catch
+        {
+            // Evitar que excepciones de inicialización disparen el panel de error de Blazor
         }
     }
 
@@ -182,9 +189,11 @@
 
     private string GetMealTypeClass(MealType type) => type switch
     {
-        MealType.Desayuno => "badge-desayuno",
-        MealType.Almuerzo => "badge-almuerzo",
-        MealType.Cena => "badge-cena",
-        _ => "badge-snack"
+        MealType.Desayuno  => "badge-desayuno",
+        MealType.Almuerzo  => "badge-almuerzo",
+        MealType.Comida    => "badge-comida",
+        MealType.Merienda  => "badge-merienda",
+        MealType.Cena      => "badge-cena",
+        _                  => "badge-snack"
     };
 }

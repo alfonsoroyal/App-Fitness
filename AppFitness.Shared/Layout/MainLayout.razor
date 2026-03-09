@@ -15,22 +15,23 @@
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    <span class="dismiss">✕</span>
-    Ha ocurrido un error inesperado.
-    <a href="" class="reload">Recargar</a>
-</div>
-
 @code {
     protected override async Task OnInitializedAsync()
     {
-        // Si el servicio ya tiene key (inyectada por GitHub Actions en appsettings.json), no hacer nada
-        if (!FoodRecognition.HasApiKey)
+        try
         {
-            // Intentar cargar desde localStorage (guardada por el usuario en Settings)
-            var storedKey = await Storage.GetAsync<string>("gemini_api_key");
-            if (!string.IsNullOrWhiteSpace(storedKey))
-                FoodRecognition.SetApiKey(storedKey);
+            // Si el servicio ya tiene key (inyectada por GitHub Actions en appsettings.json), no hacer nada
+            if (!FoodRecognition.HasApiKey)
+            {
+                // Intentar cargar desde localStorage (guardada por el usuario en Settings)
+                var storedKey = await Storage.GetAsync<string>("gemini_api_key");
+                if (!string.IsNullOrWhiteSpace(storedKey))
+                    FoodRecognition.SetApiKey(storedKey);
+            }
+        }
+        catch
+        {
+            // Ignorar errores de inicialización para no disparar blazor-error-ui
         }
     }
 }

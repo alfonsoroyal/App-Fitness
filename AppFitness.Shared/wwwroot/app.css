@@ -160,8 +160,10 @@ html, body {
 
 .badge-desayuno { background: #fbbf2444; color: #fbbf24; }
 .badge-almuerzo { background: #4ade8044; color: #4ade80; }
-.badge-cena { background: #818cf844; color: #818cf8; }
-.badge-snack { background: #f9731644; color: #f97316; }
+.badge-comida   { background: #34d39944; color: #34d399; }
+.badge-merienda { background: #f9731644; color: #f97316; }
+.badge-cena     { background: #818cf844; color: #818cf8; }
+.badge-snack    { background: #94a3b844; color: #94a3b8; }
 
 .meal-foods { flex: 1; color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .meal-kcal { font-weight: 600; color: var(--accent2); white-space: nowrap; }

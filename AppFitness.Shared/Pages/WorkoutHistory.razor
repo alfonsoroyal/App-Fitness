@@ -145,13 +145,17 @@
 
     protected override async Task OnInitializedAsync()
     {
-        allSessions = await WorkoutLog.GetAllAsync();
-        exerciseNames = allSessions
-            .SelectMany(s => s.Sets.Select(ws => ws.ExerciseName))
-            .Distinct()
-            .OrderBy(n => n)
-            .ToList();
-        await ChangePeriod(period);
+        try
+        {
+            allSessions = await WorkoutLog.GetAllAsync();
+            exerciseNames = allSessions
+                .SelectMany(s => s.Sets.Select(ws => ws.ExerciseName))
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+            await ChangePeriod(period);
+        }
+        catch { }
     }
 
     private async Task ChangePeriod(int days)
