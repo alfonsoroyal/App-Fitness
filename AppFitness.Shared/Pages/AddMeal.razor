@@ -1,11 +1,9 @@
 ﻿@page "/food/add"
-@using AppFitness.Shared.Services
-@using AppFitness.Shared.Models
+
 @inject IMealLogService MealLog
 @inject INutritionSearchService NutritionSearch
 @inject IFoodRecognitionService FoodRecognition
 @inject NavigationManager Nav
-@inject IJSRuntime JS
 
 <PageTitle>Añadir Comida</PageTitle>
 
@@ -276,11 +274,6 @@
     private bool apiUnavailable = false;
     private List<FoodItem> searchResults = new();
     private List<FoodItem> selectedFoods = new();
-
-    private void RetakePhoto()
-    {
-        // Método eliminado
-    }
 
     private async Task AnalyzeText()
     {

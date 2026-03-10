@@ -42,36 +42,41 @@
         }
         else
         {
-            @foreach (var (wset, idx) in session.Sets.Select((s, i) => (s, i)))
+            @foreach (var group in session.Sets.GroupBy(s => s.ExerciseName))
             {
                 <div class="workout-set-card">
                     <div class="set-card-header">
                         <div class="set-exercise-name">
-                            <input class="exercise-name-input" @bind="wset.ExerciseName"
+                            <input class="exercise-name-input" @bind="group.First().ExerciseName"
                                    placeholder="Nombre del ejercicio" />
-                            <input class="muscle-input" @bind="wset.MuscleGroup"
+                            <input class="muscle-input" @bind="group.First().MuscleGroup"
                                    placeholder="Músculo" />
                         </div>
-                        <button class="btn-remove" @onclick="() => RemoveSet(idx)">✕</button>
+                        <button class="btn-remove" @onclick="() => RemoveAllSets(group.Key)">✕</button>
                     </div>
-                    <div class="set-inputs">
-                        <div class="set-field">
-                            <label>Series</label>
-                            <input type="number" min="1" max="20" @bind="wset.Sets" class="set-num-input" />
+                    @foreach (var wset in group)
+                    {
+                        <div class="set-inputs">
+                            <div class="set-field">
+                                <label>Series</label>
+                                <input type="number" min="1" max="20" @bind="wset.Sets" class="set-num-input" />
+                            </div>
+                            <div class="set-field">
+                                <label>Reps</label>
+                                <input type="number" min="1" max="200" @bind="wset.Reps" class="set-num-input" />
+                            </div>
+                            <div class="set-field">
+                                <label>Peso (kg)</label>
+                                <input type="number" min="0" step="0.5" @bind="wset.WeightKg" class="set-num-input" />
+                            </div>
+                            <div class="set-vol">
+                                <span class="vol-label">Volumen</span>
+                                <span class="vol-value">@wset.Volume.ToString("0") kg</span>
+                            </div>
+                            <button class="btn-remove-set" @onclick="() => RemoveSetById(wset.Id)">🗑️</button>
                         </div>
-                        <div class="set-field">
-                            <label>Reps</label>
-                            <input type="number" min="1" max="200" @bind="wset.Reps" class="set-num-input" />
-                        </div>
-                        <div class="set-field">
-                            <label>Peso (kg)</label>
-                            <input type="number" min="0" step="0.5" @bind="wset.WeightKg" class="set-num-input" />
-                        </div>
-                        <div class="set-vol">
-                            <span class="vol-label">Volumen</span>
-                            <span class="vol-value">@wset.Volume.ToString("0") kg</span>
-                        </div>
-                    </div>
+                    }
+                    <button class="btn-add-set" @onclick="() => AddSetToExercise(group.Key)">+ Añadir set</button>
                 </div>
             }
 
@@ -324,6 +329,31 @@
             session.Sets.RemoveAt(index);
     }
 
+    private void RemoveAllSets(string exerciseName)
+    {
+        session.Sets.RemoveAll(s => s.ExerciseName == exerciseName);
+    }
+    private void RemoveSetById(Guid setId)
+    {
+        session.Sets.RemoveAll(s => s.Id == setId);
+    }
+    private void AddSetToExercise(string exerciseName)
+    {
+        var baseSet = session.Sets.FirstOrDefault(s => s.ExerciseName == exerciseName);
+        if (baseSet != null)
+        {
+            session.Sets.Add(new WorkoutSet
+            {
+                ExerciseId   = baseSet.ExerciseId,
+                ExerciseName = baseSet.ExerciseName,
+                MuscleGroup  = baseSet.MuscleGroup,
+                Sets         = 1,
+                Reps         = 10,
+                WeightKg     = 0
+            });
+        }
+    }
+
     private async Task SaveSession()
     {
         if (!session.Sets.Any())
@@ -335,4 +365,3 @@
         Nav.NavigateTo("workout");
     }
 }
-
