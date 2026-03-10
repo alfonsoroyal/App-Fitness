@@ -64,22 +64,27 @@
                 @if (expandedSession == session.Id)
                 {
                     <div class="session-exercises">
-                        @foreach (var set in session.Sets)
+                        @foreach (var group in session.Sets.GroupBy(s => s.ExerciseName))
                         {
                             <div class="exercise-row">
                                 <div class="exercise-name-col">
-                                    <span class="exercise-name">@set.ExerciseName</span>
-                                    @if (!string.IsNullOrEmpty(set.MuscleGroup))
+                                    <span class="exercise-name">@group.Key</span>
+                                    @if (!string.IsNullOrEmpty(group.First().MuscleGroup))
                                     {
-                                        <span class="muscle-tag">@set.MuscleGroup</span>
+                                        <span class="muscle-tag">@group.First().MuscleGroup</span>
                                     }
                                 </div>
                                 <div class="exercise-detail-col">
-                                    <span class="set-detail">@set.Sets series × @set.Reps reps</span>
-                                    @if (set.WeightKg > 0)
+                                    @foreach (var set in group)
                                     {
-                                        <span class="weight-detail">⚖️ @set.WeightKg kg</span>
-                                        <span class="volume-detail">Vol: @set.Volume.ToString("0") kg</span>
+                                        <div class="set-detail">
+                                            <span>@set.Sets series × @set.Reps reps</span>
+                                            @if (set.WeightKg > 0)
+                                            {
+                                                <span class="weight-detail">⚖️ @set.WeightKg kg</span>
+                                                <span class="volume-detail">Vol: @set.Volume.ToString("0") kg</span>
+                                            }
+                                        </div>
                                     }
                                 </div>
                             </div>
@@ -120,4 +125,3 @@
         await LoadSessions();
     }
 }
-

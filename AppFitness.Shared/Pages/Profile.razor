@@ -1,9 +1,5 @@
 ﻿@page "/profile"
-@using AppFitness.Shared.Services
-@using AppFitness.Shared.Models
 @inject IUserProfileService ProfileService
-@inject ILocalStorageService Storage
-@inject IFoodRecognitionService FoodRecognition
 
 <PageTitle>Mi Perfil</PageTitle>
 
@@ -128,119 +124,19 @@
             <p class="alert-success">@saveMsg</p>
         }
     }
-
-    <!-- ═══ CONFIGURACIÓN IA ═══════════════════════════════════════════════ -->
-    <div class="card-fitness card-ai-settings">
-        <div class="card-header-fitness">
-            <span class="card-icon">🤖</span>
-            <span>Reconocimiento de alimentos por IA</span>
-            @if (FoodRecognition.HasApiKey)
-            {
-                <span class="api-key-badge ok">✅ Activa</span>
-            }
-            else
-            {
-                <span class="api-key-badge warn">⚠️ Sin configurar</span>
-            }
-        </div>
-
-        <p class="ai-settings-desc">
-            La función de analizar fotos de comida usa <strong>Google Gemini</strong> (gratuito, 1.500 análisis/día).
-            Introduce tu clave API para activarla.
-        </p>
-
-        <div class="api-key-steps">
-            <span>1.</span>
-            <span>Ve a <a href="https://aistudio.google.com/app/api-keys" target="_blank" class="link-accent">aistudio.google.com/app/api-keys</a></span>
-            <span>2.</span>
-            <span>Pulsa <strong>«Create API key»</strong> → selecciona <em>Default Gemini Project</em></span>
-            <span>3.</span>
-            <span>Copia la clave y pégala aquí:</span>
-        </div>
-
-        <div class="api-key-input-row">
-            <input type="@(showApiKey ? "text" : "password")"
-                   class="form-input-fitness api-key-input"
-                   placeholder="AIzaSy…"
-                   @bind="geminiKeyInput" />
-            <button class="btn-toggle-key" @onclick="() => showApiKey = !showApiKey"
-                    title="@(showApiKey ? "Ocultar" : "Mostrar")">
-                @(showApiKey ? "🙈" : "👁️")
-            </button>
-        </div>
-
-        <div class="api-key-actions">
-            <button class="btn-save-key" @onclick="SaveApiKey"
-                    disabled="@(string.IsNullOrWhiteSpace(geminiKeyInput))">
-                💾 Guardar clave
-            </button>
-            @if (FoodRecognition.HasApiKey)
-            {
-                <button class="btn-remove-key" @onclick="RemoveApiKey">
-                    🗑️ Eliminar clave
-                </button>
-            }
-        </div>
-
-        @if (!string.IsNullOrEmpty(apiKeyMsg))
-        {
-            <p class="@(apiKeyMsg.StartsWith("✅") ? "alert-success" : "alert-error")">
-                @apiKeyMsg
-            </p>
-        }
-    </div>
 </div>
 
 @code {
     private UserProfile? profile;
     private string saveMsg = string.Empty;
 
-    // API key Gemini
-    private string geminiKeyInput = string.Empty;
-    private string apiKeyMsg = string.Empty;
-    private bool showApiKey = false;
-
     protected override async Task OnInitializedAsync()
     {
         try
         {
             profile = await ProfileService.GetAsync();
-
-            // Cargar la key guardada en localStorage para mostrarla en el input
-            var stored = await Storage.GetAsync<string>("gemini_api_key");
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                geminiKeyInput = stored;
-                FoodRecognition.SetApiKey(stored);
-            }
         }
         catch { }
-    }
-
-    private async Task SaveApiKey()
-    {
-        var key = geminiKeyInput.Trim();
-        if (string.IsNullOrWhiteSpace(key)) return;
-
-        await Storage.SetAsync("gemini_api_key", key);
-        FoodRecognition.SetApiKey(key);
-
-        apiKeyMsg = "✅ Clave guardada. Ya puedes analizar fotos de comida.";
-        await Task.Delay(3000);
-        apiKeyMsg = string.Empty;
-        StateHasChanged();
-    }
-
-    private async Task RemoveApiKey()
-    {
-        await Storage.RemoveAsync("gemini_api_key");
-        FoodRecognition.SetApiKey(string.Empty);
-        geminiKeyInput = string.Empty;
-
-        apiKeyMsg = "🗑️ Clave eliminada.";
-        await Task.Delay(2000);
-        apiKeyMsg = string.Empty;
-        StateHasChanged();
     }
 
     private async Task SaveProfile()
