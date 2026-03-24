@@ -179,8 +179,8 @@
 
     private int GetCaloriePercent()
     {
-        if (profile?.DailyCalorieGoal <= 0) return 0;
-        return (int)Math.Min(todayKcal / profile!.DailyCalorieGoal * 100, 100);
+        if (profile == null || profile.DailyCalorieGoal <= 0) return 0;
+        return (int)Math.Min(todayKcal / profile.DailyCalorieGoal * 100, 100);
     }
 
     private string GetCalorieBarClass()

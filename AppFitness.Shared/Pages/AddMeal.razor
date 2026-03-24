@@ -3,6 +3,7 @@
 @inject IMealLogService MealLog
 @inject INutritionSearchService NutritionSearch
 @inject IFoodRecognitionService FoodRecognition
+@inject IUserProfileService UserProfile
 @inject NavigationManager Nav
 
 <PageTitle>Añadir Comida</PageTitle>
@@ -233,6 +234,52 @@
         <button class="btn-add-manual" @onclick="AddManualFood">+ Añadir alimento manualmente</button>
     </div>
 
+    <!-- ANÁLISIS DE DIETA DEL DÍA (IA) -->
+    @if (selectedFoods.Any() && FoodRecognition.HasApiKey)
+    {
+        <div class="card-fitness card-diet-analysis">
+            <div class="card-header-fitness">
+                <span class="card-icon">🧠</span>
+                <span>Análisis de la dieta del día</span>
+            </div>
+            <p class="diet-analysis-hint">
+                Analiza toda la dieta de hoy —incluyendo los alimentos que estás añadiendo ahora— y recibe recomendaciones personalizadas según tu objetivo.
+            </p>
+            <button class="btn-analyze-diet" @onclick="AnalyzeDayDiet"
+                    disabled="@isAnalyzingDiet">
+                @if (isAnalyzingDiet)
+                { <span>⏳ Analizando dieta...</span> }
+                else
+                { <span>🧠 Analizar dieta del día con IA</span> }
+            </button>
+            @if (!string.IsNullOrEmpty(dietAnalysisError))
+            {
+                <div class="info-banner warn" style="margin-top:0.75rem;">⚠️ @dietAnalysisError</div>
+            }
+            @if (dietAnalysisResult != null && dietAnalysisResult.Success)
+            {
+                <div class="diet-analysis-result">
+                    <div class="diet-overall">
+                        <span class="diet-overall-label">📋 Evaluación general</span>
+                        <p class="diet-overall-text">@dietAnalysisResult.OverallAssessment</p>
+                    </div>
+                    @if (dietAnalysisResult.Recommendations.Any())
+                    {
+                        <div class="diet-recommendations">
+                            <span class="diet-rec-title">💡 Recomendaciones para tu objetivo</span>
+                            <ul class="diet-rec-list">
+                                @foreach (var rec in dietAnalysisResult.Recommendations)
+                                {
+                                    <li class="diet-rec-item">@rec</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
     <!-- Notas -->
     <div class="card-fitness">
         <label>Notas (opcional)</label>
@@ -266,6 +313,11 @@
     private string textAnalysisQuery = string.Empty;
     private string textAnalysisError = string.Empty;
     private FoodAnalysisResult? textAnalysisResult;
+
+    // ─── Análisis de dieta del día ───────────────────────────────────────────
+    private bool isAnalyzingDiet = false;
+    private string dietAnalysisError = string.Empty;
+    private DietDayAnalysisResult? dietAnalysisResult;
 
     private string searchQuery = string.Empty;
     private string lastQuery = string.Empty;
@@ -359,6 +411,32 @@
         => selectedFoods.Add(new FoodItem { Name = "Nuevo alimento", QuantityGrams = 100 });
 
     private void RemoveFood(FoodItem food) => selectedFoods.Remove(food);
+
+    private async Task AnalyzeDayDiet()
+    {
+        dietAnalysisError  = string.Empty;
+        dietAnalysisResult = null;
+        isAnalyzingDiet    = true;
+        StateHasChanged();
+        try
+        {
+            var todayMeals  = await MealLog.GetByDateAsync(mealDate);
+            var profile     = await UserProfile.GetAsync();
+            var mealTypeName = mealType.ToString();
+            dietAnalysisResult = await FoodRecognition.AnalyzeDayDietAsync(todayMeals, selectedFoods, mealTypeName, profile);
+            if (!dietAnalysisResult.Success)
+            {
+                dietAnalysisError  = dietAnalysisResult.Error!;
+                dietAnalysisResult = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            dietAnalysisError = $"Error inesperado: {ex.Message}";
+        }
+        isAnalyzingDiet = false;
+        StateHasChanged();
+    }
 
     private async Task SaveMeal()
     {

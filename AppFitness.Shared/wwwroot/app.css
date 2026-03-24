@@ -1662,3 +1662,141 @@ html, body {
     .macros-grid { grid-template-columns: repeat(3, 1fr); }
     .table-header, .table-row { grid-template-columns: 1.2fr 1fr 1fr 0.8fr 0.8fr 1fr; font-size: 0.72rem; }
 }
+
+/* ─── Análisis de dieta del día (IA) ─── */
+.card-diet-analysis {
+    border-left: 4px solid #818cf8;
+}
+
+.diet-analysis-hint {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0 0 0.75rem;
+}
+
+.btn-analyze-diet {
+    width: 100%;
+    background: linear-gradient(135deg, rgba(129,140,248,0.2), rgba(99,102,241,0.15));
+    border: 1px solid rgba(129,140,248,0.5);
+    color: #a5b4fc;
+    border-radius: 10px;
+    padding: 0.65rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+}
+.btn-analyze-diet:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(129,140,248,0.35), rgba(99,102,241,0.25));
+}
+.btn-analyze-diet:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.diet-analysis-result {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.diet-overall {
+    background: rgba(129,140,248,0.08);
+    border: 1px solid rgba(129,140,248,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+.diet-overall-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #a5b4fc;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+}
+.diet-overall-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.diet-recommendations {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+.diet-rec-title {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #4ade80;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+.diet-rec-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.diet-rec-item {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+/* ─── Análisis y recomendaciones de entrenamiento (IA) ─── */
+.workout-assessment {
+    background: rgba(129,140,248,0.08);
+    border: 1px solid rgba(129,140,248,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.5rem;
+}
+.workout-assessment-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #a5b4fc;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.35rem;
+}
+.workout-assessment-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.workout-recommendations {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+.workout-rec-title {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #4ade80;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+.workout-rec-list {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.workout-rec-item {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
