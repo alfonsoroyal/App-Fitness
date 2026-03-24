@@ -195,6 +195,27 @@
                             }
                         </div>
                     }
+
+                    @if (!string.IsNullOrEmpty(workoutResult.WorkoutAssessment))
+                    {
+                        <div class="workout-assessment">
+                            <span class="workout-assessment-label">📋 Análisis de la sesión</span>
+                            <p class="workout-assessment-text">@workoutResult.WorkoutAssessment</p>
+                        </div>
+                    }
+
+                    @if (workoutResult.Recommendations.Any())
+                    {
+                        <div class="workout-recommendations">
+                            <span class="workout-rec-title">💡 Recomendaciones</span>
+                            <ul class="workout-rec-list">
+                                @foreach (var rec in workoutResult.Recommendations)
+                                {
+                                    <li class="workout-rec-item">@rec</li>
+                                }
+                            </ul>
+                        </div>
+                    }
                 </div>
             }
         </div>

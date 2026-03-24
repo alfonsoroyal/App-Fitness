@@ -58,8 +58,11 @@ public interface IFoodRecognitionService
     /// <summary>Analiza un texto descriptivo de comida y devuelve ingredientes con macros estimados.</summary>
     Task<FoodAnalysisResult> AnalyzeTextAsync(string description);
 
-    /// <summary>Estima las kcal quemadas a partir de los ejercicios de una sesión.</summary>
+    /// <summary>Estima las kcal quemadas y analiza la sesión de entrenamiento con recomendaciones.</summary>
     Task<WorkoutAnalysisResult> AnalyzeWorkoutAsync(List<WorkoutSetInput> sets, int durationMinutes, double userWeightKg);
+
+    /// <summary>Analiza la dieta completa del día y devuelve recomendaciones personalizadas según el objetivo del usuario.</summary>
+    Task<DietDayAnalysisResult> AnalyzeDayDietAsync(List<MealEntry> savedMeals, List<FoodItem> currentMealFoods, string currentMealType, UserProfile profile);
 }
 
 /// <summary>Datos de entrada de un ejercicio para el análisis de calorías.</summary>
@@ -77,6 +80,10 @@ public class WorkoutAnalysisResult
 {
     public double TotalKcalBurned { get; set; }
     public List<ExerciseKcalDetail> Details { get; set; } = new();
+    /// <summary>Evaluación general de la sesión de entrenamiento.</summary>
+    public string WorkoutAssessment { get; set; } = string.Empty;
+    /// <summary>Recomendaciones personalizadas sobre la sesión (balance muscular, variedad, etc.).</summary>
+    public List<string> Recommendations { get; set; } = new();
     public string? Error  { get; set; }
     public bool    Success => Error == null;
 }
@@ -87,6 +94,17 @@ public class ExerciseKcalDetail
     public string ExerciseName  { get; set; } = string.Empty;
     public double KcalBurned    { get; set; }
     public string Notes         { get; set; } = string.Empty;
+}
+
+/// <summary>Resultado del análisis de la dieta del día completo con recomendaciones personalizadas.</summary>
+public class DietDayAnalysisResult
+{
+    /// <summary>Evaluación general de la dieta del día.</summary>
+    public string OverallAssessment { get; set; } = string.Empty;
+    /// <summary>Recomendaciones personalizadas para alcanzar el objetivo del usuario.</summary>
+    public List<string> Recommendations { get; set; } = new();
+    public string? Error { get; set; }
+    public bool Success => Error == null;
 }
 
 /// <summary>Resultado del análisis de un plato o alimento.</summary>

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AppFitness.Shared.Models;
 
 namespace AppFitness.Shared.Services;
 
@@ -189,17 +190,20 @@ public class FoodRecognitionService : IFoodRecognitionService
                 $"{s.ExerciseName} ({s.MuscleGroup}): {s.Sets} series x {s.Reps} reps x {s.WeightKg} kg"));
 
             var prompt =
-                "Eres un experto en fisiología del ejercicio. Dado el siguiente entrenamiento, estima las calorías quemadas.\n" +
+                "Eres un experto en fisiología del ejercicio. Dado el siguiente entrenamiento:\n" +
                 $"Peso del usuario: {userWeightKg} kg. Duración total: {durationMinutes} minutos.\n" +
-                "Ejercicios: " + sessionDesc + "\n" +
+                "Ejercicios: " + sessionDesc + "\n\n" +
+                "Realiza DOS tareas:\n" +
+                "1. Estima las calorías quemadas por ejercicio.\n" +
+                "2. Analiza la sesión: balance entre ejercicios de empuje (push) y tracción (pull), grupos musculares trabajados, posible exceso de un mismo músculo, falta de variedad, y da recomendaciones concretas para mejorar el plan de entrenamiento o prevenir lesiones.\n\n" +
                 "Responde ÚNICAMENTE con un JSON compacto en UNA SOLA LÍNEA, sin markdown.\n" +
-                "Formato exacto: {\"total_kcal\":350,\"details\":[{\"exercise\":\"Press banca\",\"kcal\":120,\"notes\":\"Compuesto alta intensidad\"}]}\n" +
-                "IMPORTANTE: total_kcal y kcal son siempre números.";
+                "Formato exacto: {\"total_kcal\":350,\"details\":[{\"exercise\":\"Press banca\",\"kcal\":120,\"notes\":\"Compuesto alta intensidad\"}],\"assessment\":\"Sesión orientada a empuje...\",\"recommendations\":[\"Añade más ejercicios de tracción como dominadas o remo\",\"Considera trabajar el core para equilibrar\"]}\n" +
+                "IMPORTANTE: total_kcal y kcal son siempre números. assessment es un string. recommendations es un array de strings con recomendaciones concretas y accionables.";
 
             var body = new
             {
                 contents = new[] { new { parts = new object[] { new { text = prompt } } } },
-                generationConfig = new { temperature = 0.1, maxOutputTokens = 1024 }
+                generationConfig = new { temperature = 0.2, maxOutputTokens = 2048 }
             };
 
             var (ok, rawText, errorMsg) = await CallGeminiAsync(body);
@@ -222,17 +226,116 @@ public class FoodRecognitionService : IFoodRecognitionService
 
             return new WorkoutAnalysisResult
             {
-                TotalKcalBurned = Math.Max(0, parsed.TotalKcal),
-                Details = (parsed.Details ?? new())
+                TotalKcalBurned    = Math.Max(0, parsed.TotalKcal),
+                Details            = (parsed.Details ?? new())
                     .Select(d => new ExerciseKcalDetail
                     {
                         ExerciseName = Capitalize(d.Exercise ?? "Ejercicio"),
                         KcalBurned   = Math.Max(0, d.Kcal),
                         Notes        = d.Notes ?? string.Empty
-                    }).ToList()
+                    }).ToList(),
+                WorkoutAssessment  = parsed.Assessment ?? string.Empty,
+                Recommendations    = parsed.Recommendations ?? new()
             };
         }
         catch (Exception ex) { return WorkoutError($"Error inesperado: {ex.Message}"); }
+    }
+
+    // ─── AnalyzeDayDietAsync ─────────────────────────────────────────────────
+    public async Task<DietDayAnalysisResult> AnalyzeDayDietAsync(
+        List<MealEntry> savedMeals, List<FoodItem> currentMealFoods, string currentMealType, UserProfile profile)
+    {
+        if (!HasApiKey)
+            return DietError("No hay API keys configuradas. Configura GEMINI_API_KEYS en GitHub Secrets o manualmente en Ajustes IA.");
+        try
+        {
+            // Construir resumen de comidas del día
+            var mealsDesc = new StringBuilder();
+
+            foreach (var meal in savedMeals)
+            {
+                var mealName  = meal.MealType.ToString();
+                var foodsList = string.Join(", ", meal.Foods.Select(f =>
+                    f.Name + " (" + f.QuantityGrams.ToString("0") + "g: " +
+                    f.TotalKcal.ToString("0") + "kcal, P:" + f.TotalProtein.ToString("0") + "g, C:" +
+                    f.TotalCarbs.ToString("0") + "g, G:" + f.TotalFat.ToString("0") + "g)"));
+                mealsDesc.AppendLine("- " + mealName + ": " + foodsList);
+            }
+
+            if (currentMealFoods.Any())
+            {
+                var currentFoods = string.Join(", ", currentMealFoods.Select(f =>
+                    f.Name + " (" + f.QuantityGrams.ToString("0") + "g: " +
+                    f.TotalKcal.ToString("0") + "kcal, P:" + f.TotalProtein.ToString("0") + "g, C:" +
+                    f.TotalCarbs.ToString("0") + "g, G:" + f.TotalFat.ToString("0") + "g)"));
+                mealsDesc.AppendLine("- " + currentMealType + " (añadiendo ahora): " + currentFoods);
+            }
+
+            var allMealFoods  = savedMeals.SelectMany(m => m.Foods).ToList();
+            allMealFoods.AddRange(currentMealFoods);
+            double totalKcal    = allMealFoods.Sum(f => (double)f.TotalKcal);
+            double totalProtein = allMealFoods.Sum(f => (double)f.TotalProtein);
+            double totalCarbs   = allMealFoods.Sum(f => (double)f.TotalCarbs);
+            double totalFat     = allMealFoods.Sum(f => (double)f.TotalFat);
+
+            var prompt = new StringBuilder();
+            prompt.AppendLine("Eres un nutricionista experto. Analiza la dieta del día completo del usuario y proporciona recomendaciones PERSONALIZADAS y CONCRETAS para alcanzar su objetivo.");
+            prompt.AppendLine();
+            prompt.AppendLine("PERFIL DEL USUARIO:");
+            prompt.AppendLine("- Objetivo: " + profile.Goal);
+            prompt.AppendLine("- Objetivo calórico diario: " + profile.DailyCalorieGoal + " kcal");
+            prompt.AppendLine("- Peso: " + profile.WeightKg + " kg");
+            prompt.AppendLine("- Altura: " + profile.HeightCm + " cm");
+            prompt.AppendLine("- Edad: " + profile.Age + " años");
+            prompt.AppendLine("- Nivel de actividad: " + profile.ActivityLevel);
+            prompt.AppendLine();
+            prompt.AppendLine("COMIDAS DEL DÍA:");
+            prompt.Append(mealsDesc);
+            prompt.AppendLine();
+            prompt.AppendLine("TOTALES DEL DÍA:");
+            prompt.AppendLine("- Calorías: " + totalKcal.ToString("0") + " kcal (objetivo: " + profile.DailyCalorieGoal + " kcal)");
+            prompt.AppendLine("- Proteínas: " + totalProtein.ToString("0") + " g");
+            prompt.AppendLine("- Carbohidratos: " + totalCarbs.ToString("0") + " g");
+            prompt.AppendLine("- Grasas: " + totalFat.ToString("0") + " g");
+            prompt.AppendLine();
+            prompt.AppendLine("Analiza si la dieta es adecuada para el objetivo. Indica si hay exceso o déficit de macros, alimentos que debería incluir o reducir, y recomendaciones específicas para el resto del día o días futuros.");
+            prompt.AppendLine();
+            prompt.AppendLine("Responde ÚNICAMENTE con un JSON compacto en UNA SOLA LÍNEA, sin markdown.");
+            prompt.Append("{\"overall\":\"Evaluación general...\",\"recommendations\":[\"Recomendación concreta 1\",\"Recomendación concreta 2\",\"Recomendación concreta 3\"]}");
+            prompt.AppendLine();
+            prompt.Append("IMPORTANTE: overall es un string. recommendations es un array de 3-5 strings con recomendaciones concretas y accionables.");
+
+            var body = new
+            {
+                contents = new[] { new { parts = new object[] { new { text = prompt.ToString() } } } },
+                generationConfig = new { temperature = 0.3, maxOutputTokens = 2048 }
+            };
+
+            var (ok, rawText, errorMsg) = await CallGeminiAsync(body);
+            if (!ok) return DietError(errorMsg!);
+
+            rawText = StripMarkdownFences(rawText!);
+            rawText = CleanGeminiJson(rawText);
+
+            GeminiDietResult? parsed;
+            try
+            {
+                parsed = JsonSerializer.Deserialize<GeminiDietResult>(rawText,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                return DietError("Error al interpretar respuesta IA.\nJSON:\n" + rawText + "\n" + ex.Message);
+            }
+            if (parsed == null) return DietError("No se pudo interpretar la respuesta de la IA.");
+
+            return new DietDayAnalysisResult
+            {
+                OverallAssessment = parsed.Overall ?? string.Empty,
+                Recommendations   = parsed.Recommendations ?? new List<string>()
+            };
+        }
+        catch (Exception ex) { return DietError("Error inesperado: " + ex.Message); }
     }
 
     // ─── ListAvailableModelsAsync ─────────────────────────────────────────────
@@ -262,8 +365,9 @@ public class FoodRecognitionService : IFoodRecognitionService
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
-    private static FoodAnalysisResult   Error(string msg)        => new() { Error = msg };
+    private static FoodAnalysisResult    Error(string msg)        => new() { Error = msg };
     private static WorkoutAnalysisResult WorkoutError(string msg) => new() { Error = msg };
+    private static DietDayAnalysisResult DietError(string msg)    => new() { Error = msg };
 
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
@@ -357,13 +461,20 @@ public class FoodRecognitionService : IFoodRecognitionService
 
     private class GeminiWorkoutResult
     {
-        [JsonPropertyName("total_kcal")] public double TotalKcal { get; set; }
-        [JsonPropertyName("details")]    public List<GeminiExerciseDetail>? Details { get; set; }
+        [JsonPropertyName("total_kcal")]      public double TotalKcal { get; set; }
+        [JsonPropertyName("details")]         public List<GeminiExerciseDetail>? Details { get; set; }
+        [JsonPropertyName("assessment")]      public string? Assessment { get; set; }
+        [JsonPropertyName("recommendations")] public List<string>? Recommendations { get; set; }
     }
     private class GeminiExerciseDetail
     {
         [JsonPropertyName("exercise")] public string? Exercise { get; set; }
         [JsonPropertyName("kcal")]     public double  Kcal     { get; set; }
         [JsonPropertyName("notes")]    public string? Notes    { get; set; }
+    }
+    private class GeminiDietResult
+    {
+        [JsonPropertyName("overall")]         public string? Overall { get; set; }
+        [JsonPropertyName("recommendations")] public List<string>? Recommendations { get; set; }
     }
 }
