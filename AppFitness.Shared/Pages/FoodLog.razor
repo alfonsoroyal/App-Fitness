@@ -2,6 +2,7 @@
 
 @inject IMealLogService MealLog
 @inject IUserProfileService ProfileService
+@inject IFoodRecognitionService FoodRecognition
 
 <PageTitle>Registro de Comidas</PageTitle>
 
@@ -89,16 +90,102 @@
         </div>
     }
 
-    <div class="fab-container">
+    <div class="fab-container @(meals.Any() && FoodRecognition.HasApiKey ? "fab-row" : "")">
+        @if (meals.Any() && FoodRecognition.HasApiKey)
+        {
+            <button class="fab fab-analyze" @onclick="OpenDietAnalysis" disabled="@isAnalyzingDiet">
+                @if (isAnalyzingDiet)
+                { <span>⏳ Analizando...</span> }
+                else
+                { <span>🧠 Analizar dieta</span> }
+            </button>
+        }
         <a href="food/add?date=@selectedDate.ToString("yyyy-MM-dd")" class="fab">+ Añadir comida</a>
     </div>
 </div>
+
+<!-- Panel de análisis de dieta del día -->
+@if (showAnalysisPanel)
+{
+    <div class="diet-panel-overlay" @onclick="ClosePanel"></div>
+    <div class="diet-panel @(showAnalysisPanel ? "diet-panel-open" : "")">
+        <div class="diet-panel-header">
+            <div>
+                <span class="diet-panel-title">🧠 Análisis de la dieta</span>
+                <span class="diet-panel-date">@selectedDate.ToString("ddd, d MMM yyyy")</span>
+            </div>
+            <button class="diet-panel-close" @onclick="ClosePanel">✕</button>
+        </div>
+
+        @if (isAnalyzingDiet)
+        {
+            <div class="diet-panel-loading">
+                <div class="loading-spinner"></div>
+                <p>La IA está analizando tu dieta de hoy...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(dietAnalysisError))
+        {
+            <div class="info-banner warn">⚠️ @dietAnalysisError</div>
+        }
+        else if (dietAnalysisResult != null)
+        {
+            <!-- Resumen de macros del día -->
+            <div class="diet-panel-macros">
+                <div class="dp-macro">
+                    <span class="dp-macro-val">@totalKcal.ToString("0")</span>
+                    <span class="dp-macro-lbl">kcal</span>
+                </div>
+                <div class="dp-macro protein">
+                    <span class="dp-macro-val">@totalProtein.ToString("0")g</span>
+                    <span class="dp-macro-lbl">proteína</span>
+                </div>
+                <div class="dp-macro carbs">
+                    <span class="dp-macro-val">@totalCarbs.ToString("0")g</span>
+                    <span class="dp-macro-lbl">carbos</span>
+                </div>
+                <div class="dp-macro fat">
+                    <span class="dp-macro-val">@totalFat.ToString("0")g</span>
+                    <span class="dp-macro-lbl">grasa</span>
+                </div>
+            </div>
+
+            <!-- Evaluación general -->
+            <div class="diet-overall">
+                <span class="diet-overall-label">📋 Evaluación general</span>
+                <p class="diet-overall-text">@dietAnalysisResult.OverallAssessment</p>
+            </div>
+
+            <!-- Recomendaciones -->
+            @if (dietAnalysisResult.Recommendations.Any())
+            {
+                <div class="diet-recommendations">
+                    <span class="diet-rec-title">💡 Recomendaciones para tu objetivo</span>
+                    <ul class="diet-rec-list">
+                        @foreach (var rec in dietAnalysisResult.Recommendations)
+                        {
+                            <li class="diet-rec-item">@rec</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <button class="btn-reanalyze" @onclick="OpenDietAnalysis">🔄 Volver a analizar</button>
+        }
+    </div>
+}
 
 @code {
     private List<MealEntry> meals = new();
     private UserProfile? profile;
     private DateTime selectedDate = DateTime.Today;
     private double totalKcal, totalProtein, totalCarbs, totalFat;
+
+    // ─── Análisis de dieta ────────────────────────────────────────────────────
+    private bool showAnalysisPanel = false;
+    private bool isAnalyzingDiet = false;
+    private string dietAnalysisError = string.Empty;
+    private DietDayAnalysisResult? dietAnalysisResult;
 
     protected override async Task OnInitializedAsync()
     {
@@ -113,10 +200,14 @@
     private async Task LoadMeals()
     {
         meals = await MealLog.GetByDateAsync(selectedDate);
-        totalKcal = meals.Sum(m => m.TotalKcal);
+        totalKcal    = meals.Sum(m => m.TotalKcal);
         totalProtein = meals.Sum(m => m.TotalProtein);
-        totalCarbs = meals.Sum(m => m.TotalCarbs);
-        totalFat = meals.Sum(m => m.TotalFat);
+        totalCarbs   = meals.Sum(m => m.TotalCarbs);
+        totalFat     = meals.Sum(m => m.TotalFat);
+        // Reset análisis al cambiar de día
+        showAnalysisPanel  = false;
+        dietAnalysisResult = null;
+        dietAnalysisError  = string.Empty;
     }
 
     private async Task PrevDay()
@@ -134,8 +225,39 @@
         }
     }
 
-    private async Task DeleteMeal(Guid id)
+    private async Task OpenDietAnalysis()
     {
+        showAnalysisPanel  = true;
+        isAnalyzingDiet    = true;
+        dietAnalysisError  = string.Empty;
+        dietAnalysisResult = null;
+        StateHasChanged();
+        try
+        {
+            var currentProfile = profile ?? await ProfileService.GetAsync();
+            dietAnalysisResult = await FoodRecognition.AnalyzeDayDietAsync(
+                meals, new List<FoodItem>(), "Resumen del día", currentProfile);
+            if (!dietAnalysisResult.Success)
+            {
+                dietAnalysisError  = dietAnalysisResult.Error!;
+                dietAnalysisResult = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            dietAnalysisError = "Error inesperado: " + ex.Message;
+        }
+        isAnalyzingDiet = false;
+        StateHasChanged();
+    }
+
+    private void ClosePanel()
+    {
+        showAnalysisPanel = false;
+        StateHasChanged();
+    }
+
+    private async Task DeleteMeal(Guid id)    {
         await MealLog.DeleteAsync(id);
         await LoadMeals();
     }
